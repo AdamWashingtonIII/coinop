@@ -17,7 +17,7 @@ describe("fairness + ruleset pinning (adopted from the DeepSeek review)", () => 
     expect(g.revealSeed()).toBe("4242"); // revealed into the replay record at game over
   });
   it("every live engine satisfies the shared contract", () => {
-    for (const slug of ["stacker", "snake", "breaker"]) {
+    for (const slug of ["stacker", "snake", "breaker", "thermonuclear", "tictactoe", "lightcycles", "battleship", "chess", "checkers", "go"]) {
       const e = createEngine(slug);
       expect(e).not.toBeNull();
       expect(e!.state().slug).toBe(slug);

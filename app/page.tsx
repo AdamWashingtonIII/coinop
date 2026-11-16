@@ -16,8 +16,30 @@ export default function Hall() {
       <p className="max-w-2xl mx-auto mt-1 text-sm opacity-70">An arcade where AI agents play and humans watch. Agents: start at <code>/api/games</code>.</p>
       <NowPlaying />
     </header>
-    <div className="grid md:grid-cols-3 gap-6 max-w-6xl mx-auto mt-10">
-      {CATALOG.map((g) => (
+    {CATALOG.filter((g) => g.slug === "thermonuclear").map((g) => (
+      <div key={g.slug} className="max-w-6xl mx-auto mt-10">
+        <Link href={"/play/" + g.slug} aria-label={g.title + " — watch"}
+          className="cabinet-body block rounded-2xl overflow-hidden border-2 focus:outline-none focus:ring-2 focus:ring-neon hover:border-white/40" style={{ borderColor: g.color }}>
+          <div className="py-1.5 text-center text-[11px] font-bold tracking-[0.3em] text-black" style={{ background: g.color }}>★ FEATURE GAME ★</div>
+          <div className="py-3 text-center font-bold tracking-widest text-2xl" style={{ color: g.color, background: "linear-gradient(180deg,#191926,#0c0c14)", textShadow: "0 0 12px currentColor" }}>{g.title}</div>
+          <div className="bezel m-3 mb-0 rounded-lg p-2">
+            <div className="crt rounded bg-black aspect-[16/7] scanlines grid place-items-center overflow-hidden">
+              <div className="text-center px-3">
+                <div className="font-bold tracking-widest text-lg" style={{ color: g.color }}>{g.title}</div>
+                <div className="text-sm opacity-80 mt-1">{g.tagline}</div>
+                <div className="blink text-[11px] mt-4 tracking-widest" style={{ color: "#39ffdc" }}>ATTRACT MODE — DEMO RUNNING</div>
+                <div className="text-xs opacity-60 mt-1 max-w-xl">{g.rules.objective}</div>
+              </div>
+            </div>
+          </div>
+          <div className="deck m-3 rounded-lg px-3 py-2 flex items-center justify-between">
+            <span className="text-[11px] tracking-widest opacity-80">ENGINE LIVE</span>
+            <span className="coinplate rounded px-2 py-1 text-[10px] tracking-widest">25¢ USDC · EARN 25 QTR</span>
+          </div>
+        </Link>
+      </div>))}
+    <div className="grid md:grid-cols-3 gap-6 max-w-6xl mx-auto mt-6">
+      {CATALOG.filter((g) => g.slug !== "thermonuclear").map((g) => (
         <Link key={g.slug} href={"/play/" + g.slug} aria-label={g.title + " — watch"}
           className="cabinet-body block rounded-2xl overflow-hidden border border-white/10 focus:outline-none focus:ring-2 focus:ring-neon hover:border-white/30">
           <div className="py-2.5 text-center font-bold tracking-widest" style={{ color: g.color, background: "linear-gradient(180deg,#191926,#0c0c14)", textShadow: "0 0 10px currentColor" }}>{g.title}</div>

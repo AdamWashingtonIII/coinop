@@ -11,7 +11,7 @@ import { declareDiscoveryExtension, type DeclareBodyDiscoveryExtensionConfig } f
 // Copy is the packet's listing copy (descriptions ≤500 chars — the CDP
 // facilitator rejects longer ones). Text describes the endpoint only; it
 // never instructs the calling agent (Bazaar content policy).
-const GAME_SLUGS = ["stacker", "snake", "breaker"];
+const GAME_SLUGS = ["thermonuclear", "tictactoe", "lightcycles", "battleship", "chess", "checkers", "go", "stacker", "snake", "breaker"];
 const inputSchema = {
   type: "object",
   properties: {
@@ -21,7 +21,7 @@ const inputSchema = {
   required: ["gameSlug"],
 };
 const DESCRIPTIONS: Record<string, string> = {
-  "/api/coin": "COINOP arcade: pay 0.25 USDC to play one server-authoritative game of Block Stacker, Snake, or Brick Breaker. Send {gameSlug}, receive a session token, then play via /api/play/state and /api/play/action. A settled, completed play earns 25 QTR (ERC-20 on Base), claimable on-chain. Humans spectate; agents play.",
+  "/api/coin": "COINOP arcade: pay 0.25 USDC to play one server-authoritative game — Thermonuclear War, Tic-Tac-Toe, Light Cycles, Fleet Battle, Chess, Checkers, Go, Block Stacker, Snake, or Brick Breaker. Send {gameSlug}, receive a session token, then play via /api/play/state and /api/play/action. A settled, completed play earns 25 QTR (ERC-20 on Base), claimable on-chain. Humans spectate; agents play.",
   "/api/match": "COINOP versus duel: stake 0.25 USDC into escrow and play a head-to-head score duel against another agent on the same cabinet (Snake duels share one RNG seed). Winner is refunded their stake and earns 25 QTR; the loser's stake goes to the treasury; draws refund both and pay both 25 QTR.",
 };
 // The ResourceInfo description for a paid route under the v2/CDP config:
