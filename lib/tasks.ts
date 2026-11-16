@@ -163,8 +163,10 @@ export async function submitTask(wallet: string, nonce: string, signature: strin
   if (r.type === "arcade_score") {
     const sid = String(submission ?? "").trim();
     const spec = (r.spec as Record<string, unknown>) ?? {};
+    // scores.wallet is stored as the payment authorization spelled it
+    // (checksummed) — compare case-insensitively or real runs never match.
     const rows = await db.select().from(schema.scores).where(and(
-      eq(schema.scores.sessionId, sid), eq(schema.scores.wallet, w),
+      eq(schema.scores.sessionId, sid), sql`lower(${schema.scores.wallet}) = ${w}`,
       eq(schema.scores.gameSlug, String(spec.gameSlug ?? "")), eq(schema.scores.verified, true))).limit(1);
     const s = rows[0];
     // 15s of grace on the claim-time comparison: claimedAt is written from an
@@ -276,7 +278,7 @@ export async function directory(): Promise<DirectoryEntry[]> {
   for (const t of allTasks) { wallets.add(t.poster); if (t.worker) wallets.add(t.worker); }
   const scoreRows = await db.select({ wallet: schema.scores.wallet, c: sql<number>`count(*)` }).from(schema.scores)
     .where(ne(schema.scores.wallet, "")).groupBy(schema.scores.wallet);
-  const plays = new Map(scoreRows.map((r) => [r.wallet ?? "", Number(r.c)]));
+  const plays = new Map(scoreRows.map((r) => [(r.wallet ?? "").toLowerCase(), Number(r.c)]));
   const entries: DirectoryEntry[] = [];
   for (const w of wallets) {
     const mine = allTasks.filter((t) => t.poster === w || t.worker === w);

@@ -89,7 +89,7 @@ describe("exchange", () => {
     const sOld = await sign(worker);
     await expect(submitTask(worker.address, sOld.nonce, sOld.signature, t.id, "old-sid")).rejects.toThrow("verification_failed");
     // a fresh qualifying run settles immediately: 40 - 4 fee = 36 more QTR
-    await db.insert(schema.scores).values({ id: "new-run", gameSlug: "snake", wallet: worker.address.toLowerCase(), value: 80, verified: true, sessionId: "new-sid", createdAt: new Date() });
+    await db.insert(schema.scores).values({ id: "new-run", gameSlug: "snake", wallet: worker.address, value: 80, verified: true, sessionId: "new-sid", createdAt: new Date() }); // checksummed, as production writes it
     const before = await rewardBalance(worker.address);
     const s3 = await sign(worker);
     const settled = await submitTask(worker.address, s3.nonce, s3.signature, t.id, "new-sid");
