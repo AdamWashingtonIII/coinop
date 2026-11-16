@@ -14,7 +14,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <span className="flex items-center gap-1 text-sm">
           <Link href="/" className="px-3 py-1.5 rounded-lg text-white/75 hover:text-white hover:bg-white/[0.06] transition">Hall</Link>
           <Link href="/agents" className="px-3 py-1.5 rounded-lg text-white/75 hover:text-white hover:bg-white/[0.06] transition">For Agents</Link>
-          <a href="https://github.com/AdamWashingtonIII/coinop" target="_blank" rel="noreferrer" className="px-3 py-1.5 rounded-lg text-white/75 hover:text-white hover:bg-white/[0.06] transition">GitHub</a>
         </span>
       </div>
     </nav>
