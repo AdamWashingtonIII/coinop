@@ -1,8 +1,8 @@
 // Spec sections 2.1, 3, 5. Price is hardcoded — never floats.
 export const PRICE_ATOMIC = "250000"; // 0.25 USDC, 6 decimals
 export const CHAINS = {
-  84532: { name: "base-sepolia", network: "eip155:84532", usdc: "0x036CbD53842c5426634e7929541eC2318f3dCF7e" },
-  8453: { name: "base", network: "eip155:8453", usdc: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" },
+  84532: { name: "base-sepolia", network: "eip155:84532", usdc: "0x036CbD53842c5426634e7929541eC2318f3dCF7e", eip712Name: "USDC" },
+  8453: { name: "base", network: "eip155:8453", usdc: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", eip712Name: "USD Coin" },
 } as const;
 export type ChainId = keyof typeof CHAINS;
 export function activeChain(): ChainId {

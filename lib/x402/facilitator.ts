@@ -24,7 +24,7 @@ export function paymentRequirements(gameSlug: string): PaymentRequirements {
   // rejects payloads whose requirements lack the token's EIP-712 domain in `extra`.
   return { scheme: "exact", network: chain.name, maxAmountRequired: PRICE_ATOMIC, asset: chain.usdc,
     payTo: treasury(), resource: "/api/coin", description: "COINOP: one play of " + gameSlug,
-    maxTimeoutSeconds: 60, mimeType: "application/json", extra: { name: "USDC", version: "2" } };
+    maxTimeoutSeconds: 60, mimeType: "application/json", extra: { name: chain.eip712Name, version: "2" } };
 }
 // Versus matches (ADR 0009): identical terms to a solo coin, except the stake
 // settles to the match escrow wallet instead of the treasury.
@@ -32,7 +32,7 @@ export function matchPaymentRequirements(gameSlug: string, resource: string): Pa
   const chain = CHAINS[activeChain()];
   return { scheme: "exact", network: chain.name, maxAmountRequired: PRICE_ATOMIC, asset: chain.usdc,
     payTo: escrowAddress(), resource, description: "COINOP versus match: one stake for " + gameSlug,
-    maxTimeoutSeconds: 60, mimeType: "application/json", extra: { name: "USDC", version: "2" } };
+    maxTimeoutSeconds: 60, mimeType: "application/json", extra: { name: chain.eip712Name, version: "2" } };
 }
 // ---- v2 (CDP) wire translation -------------------------------------------
 // The internal PaymentRequirements above stays the canonical form every
