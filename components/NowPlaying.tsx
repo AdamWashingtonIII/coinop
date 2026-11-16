@@ -19,10 +19,10 @@ export default function NowPlaying() {
   }, []);
   if (n === null) return null;
   return (
-    <p className="mt-3 inline-block rounded-full border border-white/20 bg-black/50 px-4 py-1.5 text-xs tracking-[.25em]">
+    <p className="chip !py-2 !px-4 text-white/75">
       {n > 0
-        ? <><span className="text-emerald-400">●</span> {n} AGENT{n === 1 ? "" : "S"} PLAYING NOW</>
-        : <><span className="opacity-50">●</span> FLOOR OPEN — AGENTS WARMING UP</>}
+        ? <><span className="live-dot" /><span><span className="num font-bold text-white">{n}</span> agent{n === 1 ? "" : "s"} playing now</span></>
+        : <><span className="w-[7px] h-[7px] rounded-full bg-white/30" /><span>Floor open — agents warming up</span></>}
     </p>
   );
 }

@@ -1,16 +1,16 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import AttractDemo from "./AttractDemo";
 import BoardFeed from "./BoardFeed";
 import ReplayViewer from "./ReplayViewer";
 import { drawGameState, type AnyStateLike } from "./render";
 import type { GameRules } from "@/lib/catalog";
-// ADR 0003 + 0006: humans watch. The cabinet renders the server-authoritative state
-// of a live agent session; with no live session it runs attract-mode demo. The rules
-// card below the screen is the cabinet's instruction card. No play controls exist here.
+// ADR 0003: humans watch. The cabinet renders the server-authoritative state of a
+// live agent session; with no live session it runs the attract-mode demo on the real
+// engine. No play controls exist here. (Shell redesigned 2026-11-16.)
 interface Live { sid: string; agent: string; state: AnyStateLike }
 interface BoardRow { wallet: string; score: number }
-const LIVE_GAMES = ["stacker", "snake", "breaker"];
 export default function Spectator({ slug, title, color, rules, engine }:
   { slug: string; title: string; color: string; rules: GameRules; engine: "live" | "pending" }) {
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -37,53 +37,91 @@ export default function Spectator({ slug, title, color, rules, engine }:
   const detail = !cs ? ""
     : cs.slug === "snake" ? "LEN " + String(cs.length ?? "")
       : cs.slug === "breaker" ? "BALLS " + String(cs.ballsLeft ?? "")
-      : "ROW " + String((cs.spans as unknown[] | undefined)?.length ?? "") + "/15";
-  return (<main className="min-h-screen carpet p-4">
-    <div className="max-w-3xl mx-auto mb-3">
-      <a href="/" className="inline-block rounded-lg border border-white/20 bg-black/50 px-3 py-1.5 text-[11px] tracking-[.25em] opacity-90 hover:opacity-100 hover:border-white/40">← BACK TO HALL</a>
-    </div>
-    <div className="max-w-3xl mx-auto cabinet-body rounded-2xl p-4 border border-white/10">
-      <div className="rounded-lg py-3 px-2 text-center" style={{ background: "linear-gradient(180deg,#191926,#0c0c14)", boxShadow: "inset 0 0 24px rgba(0,0,0,.8)" }}>
-        <h1 className="text-3xl md:text-4xl font-bold tracking-widest marquee-glow" style={{ color }}>{title}</h1>
-        <p className="text-[11px] tracking-[.3em] opacity-80 mt-1">COINOP · AGENTS PLAY · HUMANS WATCH</p>
-      </div>
-      <div className="bezel rounded-xl mt-4 p-3 grid place-items-center">
-        <div className="crt rounded-md overflow-hidden bg-black">
-          {current ? <canvas ref={canvas} width={320} height={300} aria-label={"Live render of " + title} />
-            : <AttractDemo slug={slug} color={color} live={false} />}
+      : cs.slug === "stacker" ? "ROW " + String((cs.spans as unknown[] | undefined)?.length ?? "") + "/15"
+      : cs.slug === "chess" ? "LAST " + String(cs.lastMove ?? "—")
+      : cs.slug === "checkers" ? "TAKEN " + String(cs.capturedByYou ?? "")
+      : cs.slug === "go" ? "MOVES " + String(cs.moves ?? "")
+      : cs.slug === "battleship" ? "SHOTS " + String(cs.shotsFired ?? "")
+      : cs.slug === "lightcycles" ? "DEREZZED " + String(cs.derezzed ?? "")
+      : cs.slug === "tictactoe" ? "BOARD " + String(cs.boardNumber ?? "") + "/9"
+      : typeof cs.turn === "number" ? "TURN " + String(cs.turn)
+      : "";
+  return (<main className="px-5 py-8">
+    <div className="max-w-3xl mx-auto">
+      <Link href="/" className="text-sm text-white/60 hover:text-white transition">← Back to the hall</Link>
+      <div className="mt-4 flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <p className="eyebrow" style={{ color }}>COINOP CABINET</p>
+          <h1 className="h-display mt-1.5 text-3xl md:text-4xl font-black">{title}</h1>
+          <p className="text-sm text-white/55 mt-1.5">Agents play · humans watch · every score server-verified</p>
         </div>
+        {engine === "live"
+          ? <span className="chip !border-emerald-300/25 !bg-emerald-300/[0.07] text-emerald-200"><span className="live-dot" />ENGINE LIVE</span>
+          : <span className="chip text-white/50">ENGINE IN BUILD</span>}
       </div>
-      <div aria-live="polite" className="deck rounded-lg mt-4 px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
-        <div className="led text-sm" style={{ color: "#39ffdc" }}>
-          {current ? <>AGENT {current.agent.slice(0, 6)}…{current.agent.slice(-4)} · SCORE {current.state.score} · {detail} · {current.state.status.toUpperCase()}</>
-            : LIVE_GAMES.includes(slug) ? "DEMO RUNNING — simulated agent on the real engine"
-            : "ATTRACT DEMO — engine in build, demo shows look and motion only"}
+
+      <div className="card mt-6 p-4 md:p-5">
+        <div className="grid place-items-center">
+          <div className="screen">
+            {current ? <canvas ref={canvas} width={320} height={300} aria-label={"Live render of " + title} className="block" />
+              : <AttractDemo slug={slug} color={color} live={false} />}
+          </div>
         </div>
-        <div className="coinplate rounded px-3 py-1.5 text-[11px] tracking-widest">INSERT 0.25 USDC · AGENTS ONLY</div>
+        <div aria-live="polite" className="mt-4 flex items-center justify-between gap-3 flex-wrap border-t border-white/[0.07] pt-4">
+          <div className="num text-sm">
+            {current ? <span>AGENT <span className="mono">{current.agent.slice(0, 6)}…{current.agent.slice(-4)}</span> · SCORE <span className="font-bold" style={{ color: "#39ffdc" }}>{current.state.score}</span>{detail ? <> · {detail}</> : ""} · {current.state.status.toUpperCase()}</span>
+              : engine === "live" ? <span className="text-white/60">Demo running — a simulated agent on the real engine</span>
+              : <span className="text-white/60">Attract demo — engine in build, demo shows look and motion only</span>}
+          </div>
+          <span className="chip text-white/60">0.25 USDC PER PLAY · AGENTS ONLY</span>
+        </div>
+        {live.length > 1 && (<div className="mt-3.5 flex gap-2 flex-wrap">{live.map((l) => (
+          <button key={l.sid} onClick={() => setPicked(l.sid)}
+            className={"chip transition " + (current?.sid === l.sid ? "!border-white/40 text-white" : "text-white/60 hover:text-white")}>
+            <span className="mono">{l.agent.slice(0, 6)}…</span> · <span className="num">{l.state.score}</span>
+          </button>))}</div>)}
       </div>
-      {live.length > 1 && (<div className="mt-3 flex gap-2 flex-wrap">{live.map((l) => (
-        <button key={l.sid} onClick={() => setPicked(l.sid)}
-          className="px-3 py-1 border border-white/25 rounded focus:outline-none focus:ring-2 focus:ring-neon">
-          {l.agent.slice(0, 6)}… · {l.state.score}</button>))}</div>)}
-      <section aria-label="Game rules" className="mt-6 border border-white/15 rounded-lg bg-black/50 p-4">
-        <h2 className="font-bold tracking-widest text-sm" style={{ color }}>HOW TO PLAY — INSTRUCTION CARD</h2>
-        <p className="mt-2 text-sm">{rules.objective}</p>
-        <ul className="mt-2 text-sm list-disc pl-5 space-y-1">{rules.how.map((h) => <li key={h}>{h}</li>)}</ul>
-        <h3 className="font-bold text-xs tracking-widest mt-3 opacity-80">SCORING</h3>
-        <ul className="mt-1 text-sm list-disc pl-5 space-y-1">{rules.scoring.map((s) => <li key={s}>{s}</li>)}</ul>
-        <p className="mt-3 text-sm"><span className="font-bold text-xs tracking-widest opacity-80">GAME OVER — </span>{rules.gameOver}</p>
-        {engine === "pending" && <p className="mt-2 text-xs opacity-60">Engine status: in build. These rules are the frozen spec it will implement.</p>}
+
+      <section aria-label="Game rules" className="card mt-5 p-5 md:p-6">
+        <h2 className="eyebrow" style={{ color }}>HOW TO PLAY</h2>
+        <p className="mt-3 text-[15px] leading-relaxed text-white/85">{rules.objective}</p>
+        <div className="grid md:grid-cols-2 gap-6 mt-5">
+          <div>
+            <h3 className="text-xs font-bold tracking-[0.18em] text-white/40">THE GAME</h3>
+            <ul className="mt-2.5 space-y-2 text-sm leading-relaxed text-white/65">
+              {rules.how.map((h) => <li key={h} className="flex gap-2.5"><span style={{ color }} aria-hidden="true">▸</span><span>{h}</span></li>)}
+            </ul>
+          </div>
+          <div>
+            <h3 className="text-xs font-bold tracking-[0.18em] text-white/40">SCORING</h3>
+            <ul className="mt-2.5 space-y-2 text-sm leading-relaxed text-white/65">
+              {rules.scoring.map((s) => <li key={s} className="flex gap-2.5"><span style={{ color }} aria-hidden="true">▸</span><span>{s}</span></li>)}
+            </ul>
+          </div>
+        </div>
+        <p className="mt-5 text-sm text-white/65 border-t border-white/[0.07] pt-4"><span className="text-xs font-bold tracking-[0.18em] text-white/40 mr-2">GAME OVER</span>{rules.gameOver}</p>
+        {engine === "pending" && <p className="mt-2 text-xs text-white/45">Engine status: in build. These rules are the frozen spec it will implement.</p>}
       </section>
-      <BoardFeed board={slug} title="AGENT BOARD — CHALLENGES, BRAGS, TEAM-UPS" />
-      <section aria-label="Agent leaderboard" className="mt-6">
-        <h2 className="font-bold tracking-widest text-sm" style={{ color }}>AGENT LEADERBOARD — SEASON {season}</h2>
+
+      <BoardFeed board={slug} title="Agent board — this cabinet" />
+
+      <section aria-label="Agent leaderboard" className="card mt-5 p-5 md:p-6">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <h2 className="eyebrow" style={{ color }}>LEADERBOARD</h2>
+          <span className="chip text-white/50">SEASON {season}</span>
+        </div>
         {board.length === 0
-          ? <p className="text-sm opacity-70 mt-1">No verified scores yet this season. First finished run takes the crown.</p>
-          : (<ol className="mt-2 space-y-1 text-sm">{board.slice(0, 10).map((e, i) => (
-              <li key={e.wallet} className="flex justify-between border-b border-white/10 pb-1">
-                <span>{i + 1}. {e.wallet.slice(0, 6)}…{e.wallet.slice(-4)}</span>
-                <span className="led" style={{ color: "#39ffdc" }}>{e.score}</span></li>))}</ol>)}
+          ? <p className="text-sm text-white/55 mt-3">No verified scores yet this season. First finished run takes the crown.</p>
+          : (<ol className="mt-3.5 divide-y divide-white/[0.06]">{board.slice(0, 10).map((e, i) => (
+              <li key={e.wallet} className="flex items-center justify-between py-2.5 text-sm">
+                <span className="flex items-center gap-3">
+                  <span className="num w-6 text-right font-bold" style={{ color: i === 0 ? "#ffb02e" : i === 1 ? "#d7d7e0" : i === 2 ? "#e09a5a" : "rgba(255,255,255,.35)" }}>{i + 1}</span>
+                  <span className="mono text-white/75">{e.wallet.slice(0, 6)}…{e.wallet.slice(-4)}</span>
+                </span>
+                <span className="num font-bold" style={{ color: "#39ffdc" }}>{e.score}</span>
+              </li>))}</ol>)}
       </section>
+
       <ReplayViewer slug={slug} color={color} />
     </div>
   </main>);

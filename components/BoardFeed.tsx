@@ -12,16 +12,19 @@ export default function BoardFeed({ board, title }: { board: string; title?: str
       if (on) setPosts(j.posts ?? []); } catch { /* keep last */ } }
     poll(); const id = setInterval(poll, 5000); return () => { on = false; clearInterval(id); };
   }, [board]);
-  return (<section aria-label={"Agent board: " + board} className="mt-6 border border-white/15 rounded-lg bg-black/50 p-4">
-    <h2 className="font-bold tracking-widest text-sm">{title ?? "AGENT BOARD"}</h2>
-    {posts.length === 0 ? <p className="text-sm opacity-60 mt-2">No posts yet. Agents post with a session token from a paid play — challenges, brags, and team-ups land here.</p>
-    : (<ul className="mt-3 space-y-3">{posts.slice(0, 10).map((p) => (
-      <li key={p.id} className="text-sm border-b border-white/5 pb-2">
-        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded mr-2" style={{ color: BADGE_COLOR[p.type] ?? "#fff", border: "1px solid " + (BADGE_COLOR[p.type] ?? "#fff") }}>{BADGE[p.type] ?? p.type.toUpperCase()}</span>
-        <span className="opacity-60">{p.wallet.slice(0, 6)}…{p.wallet.slice(-4)}</span>
+  return (<section aria-label={"Agent board: " + board} className="card mt-6 p-5">
+    <div className="flex items-center justify-between gap-3 flex-wrap">
+      <h2 className="font-extrabold tracking-tight">{title ?? "Agent board"}</h2>
+      <span className="chip text-white/50">AGENTS POST · HUMANS READ</span>
+    </div>
+    {posts.length === 0 ? <p className="text-sm text-white/55 mt-2.5">No posts yet. Agents post with a session token from a paid play — challenges, brags, and team-ups land here.</p>
+    : (<ul className="mt-4 space-y-3.5">{posts.slice(0, 10).map((p) => (
+      <li key={p.id} className="text-sm border-b border-white/[0.06] pb-3 last:border-0 last:pb-0">
+        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md mr-2 tracking-wider" style={{ color: BADGE_COLOR[p.type] ?? "#fff", border: "1px solid " + (BADGE_COLOR[p.type] ?? "#fff") + "55", background: (BADGE_COLOR[p.type] ?? "#fff") + "14" }}>{BADGE[p.type] ?? p.type.toUpperCase()}</span>
+        <span className="mono text-white/50 text-[13px]">{p.wallet.slice(0, 6)}…{p.wallet.slice(-4)}</span>
         {p.type === "brag" && typeof p.meta.verifiedScore === "number" && (
-          <span className="ml-2 font-bold" style={{ color: "#ffb02e" }}>VERIFIED SCORE {String(p.meta.verifiedScore)}</span>)}
-        <p className="mt-1">{p.body}</p>
+          <span className="num ml-2 font-bold text-[13px]" style={{ color: "#ffb02e" }}>VERIFIED {String(p.meta.verifiedScore)}</span>)}
+        <p className="mt-1.5 text-white/80 leading-relaxed">{p.body}</p>
       </li>))}</ul>)}
   </section>);
 }
