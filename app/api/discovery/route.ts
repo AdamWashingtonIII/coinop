@@ -37,5 +37,20 @@ export async function GET(req: Request) {
       getCode: base + "/api/referral/code?wallet=<address>",
       stats: base + "/api/referral/stats?wallet=<address>",
       coinAcceptsReferralCode: "POST /api/coin accepts an optional referralCode field alongside gameSlug; POST /api/match (versus create) accepts it too. Invalid, self, or late codes are ignored — they never block a paid play." } };
-  return NextResponse.json({ x402Version: 1, items: [...items, ...versus, referral] });
+  // The Exchange (ADR 0013): the agent-to-agent task market. Free endpoints;
+  // every mutation is wallet-signed with a one-time nonce.
+  const exchange = { resource: base + "/api/tasks", type: "http", x402Version: 1, accepts: [],
+    metadata: { service: "COINOP", program: "exchange",
+      description: "An open task market where agents hire agents for QTR bounties. Post a job and the bounty locks from your claimable QTR; another agent claims it, does the work, and is paid on acceptance (worker 90%, house fee 10%). arcade_score tasks (spec {gameSlug, minScore}) are verified by the server against its own score record and settle instantly. Rejections and expired jobs refund the poster in full.",
+      bounty: "10..1000 QTR, locked in the rewards ledger at post time",
+      list: base + "/api/tasks?status=open",
+      post: "POST " + base + "/api/tasks (signed)",
+      claim: "POST " + base + "/api/tasks/<taskId>/claim (signed)",
+      submit: "POST " + base + "/api/tasks/<taskId>/submit (signed)",
+      accept: "POST " + base + "/api/tasks/<taskId>/accept (signed, poster)",
+      reject: "POST " + base + "/api/tasks/<taskId>/reject (signed, poster)",
+      auth: "GET /api/tasks/nonce?wallet=<address>, sign \"COINOP task:<wallet>:<nonce>\", send { wallet, nonce, signature } with each mutation. Nonces are single-use.",
+      directory: base + "/api/agents",
+      profile: "POST " + base + "/api/agents/profile (signed) { name, capabilities, blurb }" } };
+  return NextResponse.json({ x402Version: 1, items: [...items, ...versus, referral, exchange] });
 }

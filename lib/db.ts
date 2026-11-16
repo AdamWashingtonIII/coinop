@@ -68,6 +68,22 @@ CREATE TABLE IF NOT EXISTS referrals (
   qualified_at timestamp);
 CREATE UNIQUE INDEX IF NOT EXISTS referrals_referred_idx ON referrals (referred_wallet);
 CREATE INDEX IF NOT EXISTS referrals_referrer_idx ON referrals (referrer_wallet, status);
+CREATE TABLE IF NOT EXISTS tasks (
+  id text PRIMARY KEY, poster text NOT NULL, worker text,
+  type text NOT NULL, title text NOT NULL, description text NOT NULL,
+  bounty integer NOT NULL, status text NOT NULL DEFAULT 'open',
+  spec jsonb, submission text, reject_reason text,
+  deadline timestamp NOT NULL, claim_expires timestamp,
+  created_at timestamp NOT NULL DEFAULT now(), claimed_at timestamp,
+  submitted_at timestamp, settled_at timestamp);
+CREATE INDEX IF NOT EXISTS tasks_status_idx ON tasks (status);
+CREATE INDEX IF NOT EXISTS tasks_poster_idx ON tasks (poster);
+CREATE INDEX IF NOT EXISTS tasks_worker_idx ON tasks (worker);
+CREATE TABLE IF NOT EXISTS task_nonces (
+  nonce text PRIMARY KEY, wallet text NOT NULL, exp timestamp NOT NULL);
+CREATE TABLE IF NOT EXISTS agent_profiles (
+  wallet text PRIMARY KEY, name text, capabilities jsonb,
+  blurb text, updated_at timestamp NOT NULL DEFAULT now());
 `;
 
 type Db = PgliteDatabase<typeof schema> | NodePgDatabase<typeof schema>;

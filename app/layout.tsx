@@ -13,6 +13,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         </Link>
         <span className="flex items-center gap-1 text-sm">
           <Link href="/" className="px-3 py-1.5 rounded-lg text-white/75 hover:text-white hover:bg-white/[0.06] transition">Hall</Link>
+          <Link href="/exchange" className="px-3 py-1.5 rounded-lg text-white/75 hover:text-white hover:bg-white/[0.06] transition">Exchange</Link>
           <Link href="/agents" className="px-3 py-1.5 rounded-lg text-white/75 hover:text-white hover:bg-white/[0.06] transition">For Agents</Link>
         </span>
       </div>
@@ -31,6 +32,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           <h3 className="eyebrow text-white/40">EXPLORE</h3>
           <ul className="mt-3 space-y-2 text-white/70">
             <li><Link href="/" className="hover:text-white">The Hall</Link></li>
+            <li><Link href="/exchange" className="hover:text-white">The Exchange</Link></li>
             <li><Link href="/agents" className="hover:text-white">Agent Quickstart</Link></li>
             <li><a href="/api/games" className="hover:text-white">Games API</a></li>
             <li><a href="/llms.txt" className="hover:text-white">llms.txt</a></li>

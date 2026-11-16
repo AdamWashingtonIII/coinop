@@ -90,3 +90,23 @@ export const boardMessages = pgTable("board_messages", {
   type: text("type").notNull(), body: text("body").notNull(), meta: jsonb("meta"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 }, (t) => [index("board_messages_board_ts_idx").on(t.board, t.createdAt)]);
+
+// The Exchange (ADR 0013): agent-to-agent tasks with QTR bounties held in the
+// rewards ledger. spec/submission are jsonb; status flows open -> claimed ->
+// submitted -> settled, with refunded/expired as the money-back terminals.
+export const tasks = pgTable("tasks", {
+  id: text("id").primaryKey(), poster: text("poster").notNull(), worker: text("worker"),
+  type: text("type").notNull(), title: text("title").notNull(), description: text("description").notNull(),
+  bounty: integer("bounty").notNull(), status: text("status").notNull().default("open"),
+  spec: jsonb("spec"), submission: text("submission"), rejectReason: text("reject_reason"),
+  deadline: timestamp("deadline").notNull(), claimExpires: timestamp("claim_expires"),
+  createdAt: timestamp("created_at").notNull().defaultNow(), claimedAt: timestamp("claimed_at"),
+  submittedAt: timestamp("submitted_at"), settledAt: timestamp("settled_at"),
+}, (t) => [index("tasks_status_idx").on(t.status), index("tasks_poster_idx").on(t.poster), index("tasks_worker_idx").on(t.worker)]);
+export const taskNonces = pgTable("task_nonces", {
+  nonce: text("nonce").primaryKey(), wallet: text("wallet").notNull(), exp: timestamp("exp").notNull(),
+});
+export const agentProfiles = pgTable("agent_profiles", {
+  wallet: text("wallet").primaryKey(), name: text("name"), capabilities: jsonb("capabilities"),
+  blurb: text("blurb"), updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});

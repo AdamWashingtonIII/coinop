@@ -7,7 +7,7 @@ import { getDb, schema } from "./db";
 export const TOKENS_PER_PLAY = 25;
 export const TOKEN = { name: "COINOP Quarter", symbol: "QTR", chain: "base", decimals: 18,
   contract: process.env.QTR_CONTRACT_ADDRESS ?? null } as const;
-export type RewardReason = "play_reward" | "reversal" | "match_win" | "match_draw" | "referral";
+export type RewardReason = "play_reward" | "reversal" | "match_win" | "match_draw" | "referral" | "task_lock" | "task_pay" | "task_fee" | "task_refund";
 export interface RewardEntry { wallet: string; delta: number; reason: RewardReason; refSid: string; ts: number; flagged: boolean }
 const id = () => randomBytes(12).toString("hex");
 
@@ -34,6 +34,13 @@ export async function accrueReferralReward(referrerWallet: string, referredWalle
   const e: RewardEntry = { wallet: referrerWallet.toLowerCase(), delta: TOKENS_PER_PLAY, reason: "referral", refSid: referredWallet.toLowerCase(), ts: Date.now(), flagged: false };
   await db.insert(schema.rewardsLedger).values({ id: id(), wallet: e.wallet, delta: e.delta, reason: e.reason, refId: e.refSid, flagged: false });
   return e;
+}
+// The Exchange (ADR 0013): bounty movements are signed ledger deltas keyed by
+// task id — a lock debits the poster's claimable balance, settlement credits
+// the worker and the treasury fee, a refund credits the poster back.
+export async function taskLedger(wallet: string, delta: number, reason: "task_lock" | "task_pay" | "task_fee" | "task_refund", taskId: string): Promise<void> {
+  const db = await getDb();
+  await db.insert(schema.rewardsLedger).values({ id: id(), wallet: wallet.toLowerCase(), delta, reason, refId: taskId, flagged: false });
 }
 export async function flagReward(refSid: string): Promise<void> {
   const db = await getDb();
