@@ -64,7 +64,7 @@ async function rewards() {
   return j;
 }
 function claimableOf(j: Record<string, unknown>): number {
-  for (const k of ["claimable", "claimableTokens", "accrued", "balance"]) if (typeof j[k] === "number") return j[k] as number;
+  for (const k of ["tokensClaimable", "claimable", "claimableTokens", "accrued", "balance"]) if (typeof j[k] === "number") return j[k] as number;
   return NaN;
 }
 async function expectOnBoard(slug: string, minScore: number) {
@@ -90,7 +90,7 @@ async function playGame(slug: string, driver: (t: string) => Promise<Record<stri
   return final;
 }
 
-describe("production paid plays — new cabinets", () => {
+describe.skipIf(!process.env.AGENT_TEST_PRIVATE_KEY)("production paid plays — new cabinets", () => {
   it("thermonuclear: build, hold, game ends", async () => {
     await playGame("thermonuclear", async (t) => {
       let st = await state(t);
