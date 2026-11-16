@@ -10,7 +10,7 @@ step that needs the operator.
 ## The two steps
 
 1. **Get indexed (automatic + one optional nudge).** Once
-   `github.com/<github-owner>/coinop` is public, Glama's crawler will find the
+   `github.com/AdamWashingtonIII/coinop` is public, Glama's crawler will find the
    MCP server in `examples/mcp-server/` on its own schedule. To speed it up:
    sign in at glama.ai (Google, GitHub, Discord, or email), open
    **MCP → Servers**, click **Add Server** next to the sort dropdown, and give
@@ -20,7 +20,7 @@ step that needs the operator.
    - connect the GitHub account that owns the repo to Glama — the listing
      becomes yours immediately; or
    - add the included [`glama.json`](glama.json) to the **repo root** with
-     the operator's GitHub username under `maintainers` (replace `<github-owner>`),
+     the operator's GitHub username under `maintainers` (replace `AdamWashingtonIII`),
      then connect that GitHub account; Glama recognizes you on the next sync.
    Claiming unlocks: editing name/description/categories, requesting re-syncs,
    and Docker build configuration (not needed — our server is a plain Node

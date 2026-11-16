@@ -11,7 +11,7 @@ Our `examples/mcp-server/README.md` now has all three (prepared 2026-11-15).
 1. Sign in at https://mcp.so (account required).
 2. Open https://mcp.so/submit → tab **MCP Server**.
 3. Fill the form (only the repository URL is strictly required):
-   - **Repository URL:** `https://github.com/<github-owner>/coinop`
+   - **Repository URL:** `https://github.com/AdamWashingtonIII/coinop`
      (the listing will point at the monorepo; the README it parses is
      `examples/mcp-server/README.md` — if the parser reads only the root
      README, the fallback is submitting from a dedicated MCP repo or asking

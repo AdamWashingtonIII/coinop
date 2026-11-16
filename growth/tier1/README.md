@@ -11,7 +11,7 @@ smithery.yaml) is already done in the repo — see "Already built" below.
    (`git remote -v` is empty). Smithery, Glama, mcp.so, and every awesome-list
    PR need a public repo URL. **the operator:** create a public GitHub repo (suggested
    name: `coinop`), push this codebase, and tell us the URL. Every packet
-   below is written against the placeholder `<github-owner>/coinop` — one
+   below is written against the placeholder `AdamWashingtonIII/coinop` — one
    find-and-replace makes them all final.
 2. **There is no LICENSE file.** Glama grades license presence on every
    listing; npm publishing effectively requires one. **the operator:** pick a license
