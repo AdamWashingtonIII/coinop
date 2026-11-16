@@ -58,4 +58,15 @@ export function createEngine(slug: string, seed?: number): Engine | null {
 export function engineActions(slug: string): string[] {
   return MANIFESTS[slug] ? [...MANIFESTS[slug].actions] : [];
 }
+export function engineActionPattern(slug: string): string | null {
+  const m = MANIFESTS[slug] as { actionPattern?: string } | undefined;
+  return m?.actionPattern ?? null;
+}
+// Fixed action sets validate by list; open-ended sets (chess, checkers)
+// validate by the manifest's pattern — the engine still rejects illegal moves.
+export function isAllowedAction(slug: string, action: string): boolean {
+  if (engineActions(slug).includes(action)) return true;
+  const pat = engineActionPattern(slug);
+  return pat !== null && new RegExp(pat).test(action);
+}
 export function isLiveEngine(slug: string): boolean { return slug in MANIFESTS; }

@@ -315,6 +315,7 @@ export const CHECKERS_MANIFEST = {
   slug: "checkers", title: "CHECKERS", priceAtomic: "250000", asset: "USDC",
   tickMs: 0, maxDurationSeconds: 600,
   actions: ["move_<from>_<to>"],
+  actionPattern: "^move_[0-9]{1,2}_[0-9]{1,2}$",
   stateDescription: "board: 64 chars, squares 0-63 row-major from the top ('-' light square, '.' empty, 'a'/'A' your men/kings, 'h'/'H' house); you move toward row 0 and act one hop per call — captures are forced, multi-jumps continue with the same piece (mustContinueFrom), then the house answers with its full turn; score: capture man 15 / king 25, crown 10, win 100; 80 quiet half-moves ends the game on material",
   license: "Original — COINOP",
 };

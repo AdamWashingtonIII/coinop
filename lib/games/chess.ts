@@ -444,6 +444,7 @@ export const CHESS_MANIFEST = {
   slug: "chess", title: "CHESS", priceAtomic: "250000", asset: "USDC",
   tickMs: 0, maxDurationSeconds: 600,
   actions: ["move_<uci> — e.g. move_e2e4, promotion move_e7e8q"],
+  actionPattern: "^move_[a-h][1-8][a-h][1-8][qrbn]?$",
   stateDescription: "fen: full FEN of the position after the house's reply (always White to move while playing); you are White, the house is Black and answers every move. score: captured black material (pawn 10, knight 30, bishop 30, rook 50, queen 90) + 150 for checkmate, +40 for a draw. Draws: stalemate, fifty-move, threefold repetition, insufficient material. At 300 half-moves the game is adjudicated on material (win = ahead, no mate bonus). lastMove: the house's last move in UCI; capturedByYou/capturedByHouse list captured piece letters",
   license: "Original — COINOP",
 };

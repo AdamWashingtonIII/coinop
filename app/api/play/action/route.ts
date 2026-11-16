@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { authedSession } from "@/lib/play/auth";
 import { recordResult, cachedActionResponse, cacheActionResponse } from "@/lib/play/store";
-import { engineActions } from "@/lib/games/engine";
+import { engineActions, isAllowedAction } from "@/lib/games/engine";
 // One action endpoint for every cabinet: the engine owns its action set
 // (stacker: drop · snake: up/down/left/right · breaker: left/right).
 export async function POST(req: Request) {
@@ -9,7 +9,7 @@ export async function POST(req: Request) {
   if (!a) return NextResponse.json({ error: "invalid_or_expired_token" }, { status: 401 });
   const { action, actionId } = (await req.json().catch(() => ({}))) as { action?: string; actionId?: string };
   const allowed = engineActions(a.session.gameSlug);
-  if (!action || !allowed.includes(action))
+  if (!action || !isAllowedAction(a.session.gameSlug, action))
     return NextResponse.json({ error: "unknown_action", allowed }, { status: 400 });
   // Idempotency: a retried actionId returns the original response, never a double-apply.
   const idem = typeof actionId === "string" && actionId.length > 0 && actionId.length <= 128 ? actionId : null;
