@@ -15,7 +15,9 @@ import { GoGame } from "../lib/games/go";
 const BASE = "https://coinop-one.vercel.app";
 const USDC = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
 const TREASURY = "0x312e8Efd90C134f6E54A0B612dF4f55775eC2Bd7";
-const account = privateKeyToAccount(process.env.AGENT_TEST_PRIVATE_KEY as `0x${string}`);
+const account = process.env.AGENT_TEST_PRIVATE_KEY
+  ? privateKeyToAccount(process.env.AGENT_TEST_PRIVATE_KEY as `0x${string}`)
+  : (null as unknown as ReturnType<typeof privateKeyToAccount>);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function pay(gameSlug: string): Promise<string> {
