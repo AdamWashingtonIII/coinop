@@ -1,6 +1,6 @@
 # awesome-x402 lists — PR packet
 
-**Status: ready once the COINOP repo is public on GitHub** (every PR links to
+**Status: SUBMITTED Nov 15, 2026** — repo public at https://github.com/AdamWashingtonIII/coinop. PRs: xpaysh/awesome-x402 #2247; Merit-Systems/awesome-agentic-commerce #891 (their awesome-x402 now redirects there); fffilimonov/awesome-x402-servers #105; MoltyCel/x402-dev #2. Showcase issue: x402-foundation/x402 #4292. Submitted copy says Base mainnet (the packet text below predates the switch). Maintainer merge times run days–weeks; ping politely after ~2 weeks if untouched. (every PR links to
 our site; a public repo link strengthens the entry but the lists accept live
 services — the repo is needed for the operator's GitHub account to open PRs from a
 fork, and reviewers will look for a codebase). All four targets are free;
