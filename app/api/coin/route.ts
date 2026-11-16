@@ -17,15 +17,19 @@ export async function GET() {
 }
 export async function POST(req: Request) {
   const { gameSlug, referralCode } = (await req.json().catch(() => ({}))) as { gameSlug?: string; referralCode?: string };
-  if (!gameSlug) return NextResponse.json({ error: "gameSlug required" }, { status: 400 });
-  // Never take a payment for a cabinet whose engine is not live yet.
-  if (!isLiveEngine(gameSlug)) return NextResponse.json({ error: "engine_not_live", gameSlug }, { status: 400 });
-  let reqs; try { reqs = paymentRequirements(gameSlug); }
+  // The paywall answers BEFORE body validation: an unpaid request (including
+  // discovery probes with empty bodies) always gets the 402 challenge, never
+  // a 400. Validation still runs before any payment is verified, so a bad
+  // slug can never consume a signed authorization.
+  let reqs; try { reqs = paymentRequirements(gameSlug ?? "stacker"); }
   catch { return NextResponse.json({ error: "treasury_not_configured" }, { status: 503 }); }
   const header = req.headers.get("payment-signature") ?? req.headers.get("x-payment");
   if (!header) {
     return paymentRequiredResponse(reqs, "payment_required");
   }
+  if (!gameSlug) return NextResponse.json({ error: "gameSlug required" }, { status: 400 });
+  // Never take a payment for a cabinet whose engine is not live yet.
+  if (!isLiveEngine(gameSlug)) return NextResponse.json({ error: "engine_not_live", gameSlug }, { status: 400 });
   let payload: unknown;
   try { payload = JSON.parse(Buffer.from(header, "base64").toString("utf8")); }
   catch { return paymentRequiredResponse(reqs, "bad_payment_header"); }

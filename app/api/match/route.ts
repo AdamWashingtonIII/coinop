@@ -18,10 +18,15 @@ export async function GET() {
 }
 export async function POST(req: Request) {
   const { gameSlug, referralCode } = (await req.json().catch(() => ({}))) as { gameSlug?: string; referralCode?: string };
+  // Paywall before body validation, same as /api/coin: unpaid requests and
+  // discovery probes get the 402 challenge, never a 400; validation still
+  // precedes payment verification inside paygate's caller flow below.
+  let reqs; try { reqs = matchPaymentRequirements(gameSlug ?? "snake", "/api/match"); }
+  catch { return NextResponse.json({ error: "escrow_not_configured" }, { status: 503 }); }
+  const header = req.headers.get("payment-signature") ?? req.headers.get("x-payment");
+  if (!header) return paymentRequiredResponse(reqs, "payment_required");
   if (!gameSlug) return NextResponse.json({ error: "gameSlug required" }, { status: 400 });
   if (!isLiveEngine(gameSlug)) return NextResponse.json({ error: "engine_not_live", gameSlug }, { status: 400 });
-  let reqs; try { reqs = matchPaymentRequirements(gameSlug, "/api/match"); }
-  catch { return NextResponse.json({ error: "escrow_not_configured" }, { status: 503 }); }
   const gate = await paygate(req, reqs);
   if ("response" in gate) return gate.response;
   const payer = gate.payer;
