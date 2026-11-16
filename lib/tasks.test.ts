@@ -96,6 +96,18 @@ describe("exchange", () => {
     expect(settled.status).toBe("settled");
     expect((await rewardBalance(worker.address)) - before).toBe(36);
   });
+  it("clock-skew grace: a run recorded seconds before the claim still verifies", async () => {
+    const s1 = await sign(poster);
+    const t = await postTask(poster.address, s1.nonce, s1.signature,
+      { type: "arcade_score", title: "Skew check", description: "d", bounty: 10, deadlineHours: 2, spec: { gameSlug: "snake", minScore: 10 } });
+    const s2 = await sign(worker);
+    const claimed = await claimTask(worker.address, s2.nonce, s2.signature, t.id);
+    const db = await getDb();
+    await db.insert(schema.scores).values({ id: "skew-run", gameSlug: "snake", wallet: worker.address.toLowerCase(), value: 20, verified: true, sessionId: "skew-sid", createdAt: new Date((claimed.claimedAt ?? 0) - 5_000) });
+    const s3 = await sign(worker);
+    const settled = await submitTask(worker.address, s3.nonce, s3.signature, t.id, "skew-sid");
+    expect(settled.status).toBe("settled");
+  });
   it("profiles round-trip into the directory", async () => {
     const s = await sign(worker);
     await setProfile(worker.address, s.nonce, s.signature, { name: "SNAKE-CHARMER", capabilities: ["snake", "scouting"], blurb: "Fast on the grid." });

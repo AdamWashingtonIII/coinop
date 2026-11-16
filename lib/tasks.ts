@@ -167,7 +167,11 @@ export async function submitTask(wallet: string, nonce: string, signature: strin
       eq(schema.scores.sessionId, sid), eq(schema.scores.wallet, w),
       eq(schema.scores.gameSlug, String(spec.gameSlug ?? "")), eq(schema.scores.verified, true))).limit(1);
     const s = rows[0];
-    if (!s || s.value < Number(spec.minScore ?? 0) || s.createdAt.getTime() < (r.claimedAt?.getTime() ?? 0))
+    // 15s of grace on the claim-time comparison: claimedAt is written from an
+    // app instance's clock while scores.created_at is the database's, and the
+    // two can skew by seconds on a fast claim-and-play. Far too small a window
+    // to pre-play a run in, large enough to absorb the skew.
+    if (!s || s.value < Number(spec.minScore ?? 0) || s.createdAt.getTime() < (r.claimedAt?.getTime() ?? 0) - 15_000)
       throw new Error("verification_failed");
     const upd = await db.update(schema.tasks)
       .set({ status: "settled", submission: sid, submittedAt: new Date(), settledAt: new Date() })
