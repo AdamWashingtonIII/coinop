@@ -22,6 +22,7 @@ export const sessions = pgTable("sessions", {
   sid: text("sid").primaryKey(), tokenHash: text("token_hash").notNull(), gameSlug: text("game_slug").notNull(),
   wallet: text("wallet").notNull(), exp: timestamp("exp").notNull(),
   endedAt: timestamp("ended_at"), refunded: boolean("refunded").notNull().default(false),
+  playState: jsonb("play_state"),
 });
 export const scores = pgTable("scores", {
   id: text("id").primaryKey(), gameSlug: text("game_slug").notNull(), wallet: text("wallet"),

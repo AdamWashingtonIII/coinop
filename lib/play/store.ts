@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "crypto";
 import { and, eq, sql } from "drizzle-orm";
-import { createEngine, rulesetHash, type Engine, type AnyState } from "@/lib/games/engine";
+import { createEngine, createEngineWithClock, rulesetHash, type Engine, type AnyState } from "@/lib/games/engine";
 import { newSid, signSession, type SessionClaims } from "@/lib/sessions";
 import { getDb, schema } from "@/lib/db";
 // Play sessions. Live engine state stays in memory (tick-level play), but the
@@ -11,18 +11,30 @@ export interface PlaySession {
   sid: string; gameSlug: string; wallet: string; game: Engine;
   createdAt: number; paymentStatus: "verified" | "settled" | "needs_reconcile";
   tx?: string; recorded: boolean;
+  // Session persistence (ADR 0014): the seed the store dealt this run (null
+  // for the two unseeded engines) and the actionIds applied, parallel to the
+  // engine's own action log — together with createdAt they are everything a
+  // sibling instance needs to rebuild this session from sessions.play_state.
+  seed: number | null; actionIds: (string | null)[];
   // Versus matches (ADR 0009): set when this run is one side of a match. Match
   // sessions never auto-accrue the solo play reward — QTR is awarded (or not)
   // by match settlement. The seed is shared by both runs of a snake match.
   matchId?: string;
 }
 const sessions = new Map<string, PlaySession>();
+const UNSEEDED = new Set(["stacker", "breaker"]);
+export interface PersistedPlay { v: 1; seed: number | null; bornAt: number; matchId: string | null;
+  actions: { atMs: number; action: string; actionId: string | null }[] }
 export async function createPlaySession(gameSlug: string, wallet: string,
   opts: { seed?: number; matchId?: string } = {}): Promise<{ session: PlaySession; token: string; expiresAt: number }> {
-  const game = createEngine(gameSlug, opts.seed);
+  // The store deals the seed itself (ADR 0014) so it can persist it — a sibling
+  // instance rebuilds this exact run from seed + action log.
+  const seed = opts.seed ?? (UNSEEDED.has(gameSlug) ? undefined : Math.floor(Math.random() * 2 ** 31));
+  const game = createEngine(gameSlug, seed);
   if (!game) throw new Error("engine_not_live");
   const sid = newSid();
   const session: PlaySession = { sid, gameSlug, wallet, game, createdAt: Date.now(), paymentStatus: "verified", recorded: false,
+    seed: seed ?? null, actionIds: [],
     ...(opts.matchId ? { matchId: opts.matchId } : {}) };
   sessions.set(sid, session);
   const exp = Math.floor(Date.now() / 1000) + 90;
@@ -30,11 +42,52 @@ export async function createPlaySession(gameSlug: string, wallet: string,
   const token = signSession(claims);
   try {
     const db = await getDb();
+    const playState: PersistedPlay = { v: 1, seed: session.seed, bornAt: session.createdAt, matchId: opts.matchId ?? null, actions: [] };
     await db.insert(schema.sessions).values({ sid, tokenHash: createHash("sha256").update(token).digest("hex"),
-      gameSlug, wallet, exp: new Date(exp * 1000) });
+      gameSlug, wallet, exp: new Date(exp * 1000), playState });
   } catch { /* the durable row is best-effort at coin-in; the result record at game over is the critical write */ }
   return { session, token, expiresAt: exp };
 }
+// Persist the session's action log after each applied action (ADR 0014).
+export async function persistPlayState(s: PlaySession): Promise<void> {
+  try {
+    const db = await getDb();
+    const log = s.game.actionLog();
+    const playState: PersistedPlay = { v: 1, seed: s.seed, bornAt: s.createdAt, matchId: s.matchId ?? null,
+      actions: log.map((a, i) => ({ atMs: a.atMs, action: a.action, actionId: s.actionIds[i] ?? null })) };
+    await db.update(schema.sessions).set({ playState }).where(eq(schema.sessions.sid, s.sid));
+  } catch { /* a missed write only means a sibling rebuild replays a shorter log */ }
+}
+// Rebuild a session this instance has never seen (ADR 0014): replay its
+// persisted action log on a virtual clock anchored at its birth, then flip
+// the clock to real time and keep playing from memory.
+export async function rebuildSession(sid: string): Promise<PlaySession | null> {
+  try {
+    const db = await getDb();
+    const rows = await db.select().from(schema.sessions).where(eq(schema.sessions.sid, sid)).limit(1);
+    const row = rows[0];
+    if (!row || row.endedAt || !row.playState) return null;
+    const p = row.playState as PersistedPlay;
+    let vt = p.bornAt; let live = false; let base = 0; let t0 = 0;
+    const now = () => (live ? base + (Date.now() - t0) : vt);
+    const game = createEngineWithClock(row.gameSlug, p.seed ?? undefined, now);
+    if (!game) return null;
+    for (const a of p.actions) { vt = p.bornAt + a.atMs; try { game.act(a.action); } catch { /* logged actions applied once already */ } }
+    base = vt; t0 = Date.now(); live = true;
+    const scored = await db.select({ id: schema.scores.id }).from(schema.scores)
+      .where(eq(schema.scores.sessionId, sid)).limit(1);
+    const s: PlaySession = { sid, gameSlug: row.gameSlug, wallet: row.wallet, game, createdAt: p.bornAt,
+      paymentStatus: "verified", recorded: scored.length > 0, seed: p.seed,
+      actionIds: p.actions.map((a) => a.actionId ?? null),
+      ...(p.matchId ? { matchId: p.matchId } : {}) };
+    sessions.set(sid, s);
+    return s;
+  } catch { return null; }
+}
+export async function getSessionAsync(sid: string): Promise<PlaySession | undefined> {
+  return sessions.get(sid) ?? (await rebuildSession(sid)) ?? undefined;
+}
+export function evictSession(sid: string): void { sessions.delete(sid); actionCache.delete(sid); }
 export function getSession(sid: string): PlaySession | undefined { return sessions.get(sid); }
 export function publicState(s: PlaySession): { sid: string; agent: string; state: AnyState } {
   return { sid: s.sid, agent: s.wallet, state: s.game.state() };

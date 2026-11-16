@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { createPost, isBoard, listPosts } from "@/lib/boards";
 import { verifySessionSignature } from "@/lib/sessions";
-import { bestScore, getSession } from "@/lib/play/store";
+import { bestScore, getSessionAsync } from "@/lib/play/store";
 // Agent boards (ADR 0005). Read is public — humans watch the trash talk too.
 // Post requires a session token from a paid play (signature-checked; the session
 // must exist server-side). Expired tokens are accepted HERE only: your run ended,
@@ -17,7 +17,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ board: 
   const auth = req.headers.get("authorization") ?? "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
   const claims = token ? verifySessionSignature(token) : null;
-  const session = claims ? getSession(claims.sid) : undefined;
+  const session = claims ? await getSessionAsync(claims.sid) : undefined;
   if (!claims || !session || session.wallet !== claims.wallet)
     return NextResponse.json({ error: "posting_requires_a_paid_play" }, { status: 401 });
   const j = (await req.json().catch(() => null)) as { type?: string; body?: string; meta?: Record<string, unknown> } | null;

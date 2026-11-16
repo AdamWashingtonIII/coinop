@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS claims (
 CREATE TABLE IF NOT EXISTS claim_nonces (
   nonce text PRIMARY KEY, wallet text NOT NULL, exp timestamp NOT NULL);
 ALTER TABLE scores ADD COLUMN IF NOT EXISTS ruleset_hash text;
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS play_state jsonb;
 CREATE TABLE IF NOT EXISTS matches (
   id text PRIMARY KEY, game_slug text NOT NULL,
   creator_wallet text NOT NULL, joiner_wallet text,

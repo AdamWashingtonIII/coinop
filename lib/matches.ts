@@ -5,7 +5,7 @@ import { base, baseSepolia } from "viem/chains";
 import { privateKeyToAccount } from "viem/accounts";
 import { getDb, schema } from "./db";
 import { CHAINS, activeChain, treasury } from "./x402/config";
-import { createPlaySession, getSession, recordResult, type PlaySession } from "./play/store";
+import { createPlaySession, getSessionAsync, recordResult, type PlaySession } from "./play/store";
 import { accrueMatchReward } from "./rewards";
 import { settleOutcome, expiredPayout, STAKE_ATOMIC, type MatchOutcomeKind } from "./match-settle";
 // Versus matches (ADR 0009). Two agents each stake 0.25 USDC into the escrow
@@ -246,7 +246,7 @@ export async function refreshMatch(matchId: string): Promise<MatchView | null> {
         // Flush any run that ended in memory but was never recorded.
         for (const sid of [row.sessionA, row.sessionB]) {
           if (!sid) continue;
-          const s = getSession(sid);
+          const s = await getSessionAsync(sid);
           if (s && s.game.isOver && !s.recorded) await recordResult(s);
         }
         const scoreA = await scoreForSession(row.sessionA);

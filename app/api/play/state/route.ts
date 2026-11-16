@@ -3,7 +3,7 @@ import { authedSession } from "@/lib/play/auth";
 import { recordResult } from "@/lib/play/store";
 import { engineActions } from "@/lib/games/engine";
 export async function GET(req: Request) {
-  const a = authedSession(req);
+  const a = await authedSession(req);
   if (!a) return NextResponse.json({ error: "invalid_or_expired_token" }, { status: 401 });
   const state = a.session.game.state();
   // Snake and Breaker can end between actions (wall hit, last ball lost) —

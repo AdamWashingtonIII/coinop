@@ -55,6 +55,24 @@ export function createEngine(slug: string, seed?: number): Engine | null {
     default: return null;
   }
 }
+// Session rebuild (ADR 0014): every engine is deterministic in (seed, action
+// log, clock), so any instance can rebuild a session by replaying its log on a
+// virtual clock. This factory is createEngine with the clock injected.
+export function createEngineWithClock(slug: string, seed: number | undefined, now: () => number): Engine | null {
+  switch (slug) {
+    case "stacker": return new StackerGame(now);
+    case "snake": return new SnakeGame(now, seed);
+    case "breaker": return new BreakerGame(now);
+    case "thermonuclear": return new ThermonuclearGame(now, seed);
+    case "tictactoe": return new TicTacToeGame(now, seed);
+    case "lightcycles": return new LightCyclesGame(now, seed);
+    case "battleship": return new BattleshipGame(now, seed);
+    case "chess": return new ChessGame(now, seed);
+    case "checkers": return new CheckersGame(now, seed);
+    case "go": return new GoGame(now, seed);
+    default: return null;
+  }
+}
 export function engineActions(slug: string): string[] {
   return MANIFESTS[slug] ? [...MANIFESTS[slug].actions] : [];
 }
