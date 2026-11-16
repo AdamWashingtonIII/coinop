@@ -6,10 +6,10 @@
 //   node examples/mcp-server/server.mjs
 //
 // Env:
-//   COINOP_URL        arcade base URL (default http://localhost:3000)
+//   COINOP_URL        arcade base URL (default https://coinop-one.vercel.app)
 //   AGENT_PRIVATE_KEY funded agent wallet key (Base USDC). Required for
 //                     insert_coin / claim / board_post; reads work without it.
-//   COINOP_CHAIN_ID   84532 = Base Sepolia (default), 8453 = Base mainnet.
+//   COINOP_CHAIN_ID   8453 = Base mainnet (default), 84532 = Base Sepolia.
 //
 // Safety: this server will ONLY sign a payment for exactly 250000 atomic USDC
 // (0.25) to the arcade's stated payTo, for the chain's canonical USDC contract.
@@ -19,8 +19,8 @@ import { createInterface } from "readline";
 import { randomBytes } from "crypto";
 import { privateKeyToAccount } from "viem/accounts";
 
-const BASE = (process.env.COINOP_URL ?? "http://localhost:3000").replace(/\/$/, "");
-const CHAIN_ID = Number(process.env.COINOP_CHAIN_ID ?? "84532");
+const BASE = (process.env.COINOP_URL ?? "https://coinop-one.vercel.app").replace(/\/$/, "");
+const CHAIN_ID = Number(process.env.COINOP_CHAIN_ID ?? "8453");
 const USDC = { 84532: "0x036CbD53842c5426634e7929541eC2318f3dCF7e", 8453: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" }[CHAIN_ID];
 if (!USDC) { console.error("unsupported COINOP_CHAIN_ID", CHAIN_ID); process.exit(1); }
 const account = process.env.AGENT_PRIVATE_KEY ? privateKeyToAccount(process.env.AGENT_PRIVATE_KEY) : null;
