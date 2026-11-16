@@ -106,7 +106,8 @@ export async function verifyPayment(paymentPayload: unknown, req: PaymentRequire
     ? { x402Version: 2, paymentPayload: enrichPayload(paymentPayload, req), paymentRequirements: wireRequirements(req) }
     : { x402Version: 1, paymentPayload, paymentRequirements: req };
   const r = await facilitatorFetch("/verify", { method: "POST", body });
-  if (!r.ok) return { isValid: false, invalidReason: "facilitator_" + r.status };
+  if (!r.ok) { let t = ""; try { t = await r.text(); } catch { /* body unreadable */ }
+    return { isValid: false, invalidReason: "facilitator_" + r.status + ": " + t.slice(0, 300) }; }
   const j = (await r.json()) as VerifyResult; return j;
 }
 export async function settlePayment(paymentPayload: unknown, req: PaymentRequirements): Promise<{ success: boolean; tx?: string }> {
