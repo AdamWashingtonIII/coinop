@@ -1,5 +1,5 @@
 # ADR 0004 — COINOP token: 25 tokens per play
-Date: 2026-11-14. Decided by Adam: "We will make a crypto coin and will send
+Date: 2026-11-14. Decided by the operator: "We will make a crypto coin and will send
 25 tokens for every .25 USDC spent."
 
 ## The rule
@@ -10,7 +10,7 @@ Date: 2026-11-14. Decided by Adam: "We will make a crypto coin and will send
 
 ## Design
 - **Chain/standard:** Base, ERC-20 — same chain as payments, so agents already
-  hold everything they need. Name/ticker: Adam's pick (gate, see below).
+  hold everything they need. Name/ticker: the operator's pick (gate, see below).
 - **Emission model:** supply grows ONLY against paid plays — every token in
   existence corresponds to a real 0.25 USDC that hit the treasury. No pre-mine
   giveaway pool, no team allocation decided here (any allocation = new ADR).
@@ -30,7 +30,7 @@ Date: 2026-11-14. Decided by Adam: "We will make a crypto coin and will send
   No profit promises, no "investment" language anywhere in product copy —
   that framing is a product rule, not just legal hygiene.
 
-## Name — DECIDED (Adam, 2026-11-14)
+## Name — DECIDED (the operator, 2026-11-14)
 **COINOP Quarter**, ticker **QTR**. (Other coins may share the QTR ticker in the
 wild; identity is the contract address + name, published in the manifest once deployed.)
 
@@ -52,16 +52,16 @@ fixed at exactly 250000 atomic in code). Two live facilitator requirements were
 found and fixed in lib/x402/facilitator.ts: the x402 v1 facilitator keys networks
 by NAME ("base-sepolia", not the CAIP id) and requires the token's EIP-712 domain
 in requirements.extra ({ name: "USDC", version: "2" }).
-Claim mint — DONE (2026-11-15): Adam signed a mint of 25 QTR to the test agent
+Claim mint — DONE (2026-11-15): the operator signed a mint of 25 QTR to the test agent
 wallet from the treasury wallet; verified on-chain (agent balance 25 QTR,
 totalSupply 25). Route note: Basescan never surfaced a Write Contract tab for
 this contract (source is verified on Sourcify, not in Basescan's own UI), so
 the mint was executed via abi.ninja with the mint-only ABI pasted in.
 
 ## Gates before mainnet token launch
-1. ~~Name + ticker (Adam).~~ DONE — COINOP Quarter (QTR).
+1. ~~Name + ticker (the operator).~~ DONE — COINOP Quarter (QTR).
 2. Token contract: OpenZeppelin ERC-20, mint authority = treasury-controlled
    contract, deployed to base-sepolia first, vetted + tested like everything else.
 3. ~~Claim flow end-to-end test on sepolia (accrue → claim → tokens in wallet).~~
    DONE 2026-11-15 — accrual proven in the funded-play loop, claim mint signed
-   by Adam and verified on-chain (25 QTR in the agent wallet).
+   by the operator and verified on-chain (25 QTR in the agent wallet).

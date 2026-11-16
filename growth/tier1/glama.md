@@ -5,7 +5,7 @@ before we do anything.** Glama (glama.ai/mcp/servers) continuously indexes
 public GitHub repos containing MCP servers (74k+ servers indexed) and grades
 each listing for quality and safety. Being *indexed* is automatic; being
 *claimed* (controlling the listing's name/description/categories) is the only
-step that needs Adam.
+step that needs the operator.
 
 ## The two steps
 
@@ -20,7 +20,7 @@ step that needs Adam.
    - connect the GitHub account that owns the repo to Glama — the listing
      becomes yours immediately; or
    - add the included [`glama.json`](glama.json) to the **repo root** with
-     Adam's GitHub username under `maintainers` (replace `<github-owner>`),
+     the operator's GitHub username under `maintainers` (replace `<github-owner>`),
      then connect that GitHub account; Glama recognizes you on the next sync.
    Claiming unlocks: editing name/description/categories, requesting re-syncs,
    and Docker build configuration (not needed — our server is a plain Node
@@ -37,14 +37,14 @@ step that needs Adam.
 ## Grading gotchas (Glama scores every listing)
 
 - **License:** Glama grades license presence — the repo currently has **no
-  LICENSE file**. Add one (Adam's pick; MIT is the ecosystem default) before
+  LICENSE file**. Add one (the operator's pick; MIT is the ecosystem default) before
   or right after publishing the repo.
 - Keep the README accurate: Glama parses tools from the repo; our
   `examples/mcp-server/README.md` now has a full Tools table.
 - Paid hosting ($9/mo+) exists but is **not needed** — listing and claiming an
   open-source server are free.
 
-## Needs from Adam
+## Needs from the operator
 
 | What | Why |
 | --- | --- |

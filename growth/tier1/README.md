@@ -2,19 +2,19 @@
 
 Prepared 2026-11-15. **Nothing in this folder has been submitted anywhere.**
 Each packet contains the exact listing copy, the submission steps, and what is
-needed from Adam. Self-serve build work (A2A agent card, ElizaOS plugin,
+needed from the operator. Self-serve build work (A2A agent card, ElizaOS plugin,
 smithery.yaml) is already done in the repo — see "Already built" below.
 
 ## The two cross-cutting blockers (read first)
 
 1. **There is no public GitHub repo yet.** The COINOP repo is local-only
    (`git remote -v` is empty). Smithery, Glama, mcp.so, and every awesome-list
-   PR need a public repo URL. **Adam:** create a public GitHub repo (suggested
+   PR need a public repo URL. **the operator:** create a public GitHub repo (suggested
    name: `coinop`), push this codebase, and tell us the URL. Every packet
    below is written against the placeholder `<github-owner>/coinop` — one
    find-and-replace makes them all final.
 2. **There is no LICENSE file.** Glama grades license presence on every
-   listing; npm publishing effectively requires one. **Adam:** pick a license
+   listing; npm publishing effectively requires one. **the operator:** pick a license
    (MIT is the ecosystem default) and add it at the repo root.
 
 Also needed by several channels: **a hosted logo** — square PNG, ≥512×512, at a
@@ -23,7 +23,7 @@ asset exists yet.
 
 ## Channel summary
 
-| Channel | Packet | Status | Needs from Adam |
+| Channel | Packet | Status | Needs from the operator |
 | --- | --- | --- | --- |
 | Coinbase x402 Bazaar / CDP discovery | [coinbase-bazaar.md](coinbase-bazaar.md) | Blocked on mainnet switch (by design — no form exists) | CDP account + API keys at the mainnet switch; nothing now |
 | x402scan (bonus, same packet) | [coinbase-bazaar.md](coinbase-bazaar.md) | Ready to submit today, testnet OK | Nothing — one URL form; say the word |

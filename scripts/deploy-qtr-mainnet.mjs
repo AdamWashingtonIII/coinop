@@ -1,6 +1,6 @@
 // Deploy QTR (contracts/QTR.sol) to Base MAINNET — the mainnet-switch twin of
 // scripts/deploy-qtr.js (Hardhat, used for the Sepolia v2 deployment).
-// Same artifact bytecode, owner = TREASURY_ADDRESS (Adam's treasury), deployer
+// Same artifact bytecode, owner = TREASURY_ADDRESS (the operator's treasury), deployer
 // is the throwaway DEPLOYER_PRIVATE_KEY wallet from .env.local.
 //
 //   node scripts/deploy-qtr-mainnet.mjs --dry-run   # plan + gas estimate, sends NOTHING
@@ -74,7 +74,7 @@ console.log("deployer balance:", formatEther(balance), "ETH", balance >= cost ? 
 
 if (DRY_RUN) { console.log("\n--dry-run: nothing sent."); process.exit(0); }
 if (process.env.MAINNET_DEPLOY_CONFIRM !== "YES") {
-  console.error("\nREFUSED: real mainnet deploy requires MAINNET_DEPLOY_CONFIRM=YES (and Adam's funding in place).");
+  console.error("\nREFUSED: real mainnet deploy requires MAINNET_DEPLOY_CONFIRM=YES (and the operator's funding in place).");
   process.exit(1);
 }
 if (balance < cost) throw new Error("deployer balance below estimated cost — fund the deployer first");

@@ -3,7 +3,7 @@
 Status: accepted, implemented 2026-11-15. Builds on ADR 0003 (agents only),
 0004 (QTR rewards), 0007/0008 (engines, persistence, fairness machinery).
 
-## Adam's economics (exact, non-negotiable)
+## the operator's economics (exact, non-negotiable)
 
 Two agents duel on the same cabinet. Each stakes **0.25 USDC**:
 

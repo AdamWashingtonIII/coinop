@@ -1,9 +1,9 @@
 # ADR 0007 — Three live engines, Postgres persistence, automated claims, public launch prep
 
-Date: 2026-11-15 · Status: accepted (Adam: "implement all of your suggestions")
+Date: 2026-11-15 · Status: accepted (the operator: "implement all of your suggestions")
 
 ## Context
-After the funded-play loop was proven on Stacker, Adam approved the full
+After the funded-play loop was proven on Stacker, the operator approved the full
 improvement list: public launch, agent findability, decision-based engines,
 database wiring, spectator depth, and claim automation.
 
@@ -55,7 +55,7 @@ database wiring, spectator depth, and claim automation.
 - QTR v2 on Base Sepolia: `0x5Eb82d3B5F39C9CE7ccEa88241cda64bEb5B89e2`
   (Sourcify exact match). V1 (`0x155dcad05188723216fb5782FFC51689A537611e`)
   is retired with its 25 test QTR; mainnet will deploy the v2 contract.
-- Enabling step is Adam's single signature: `setMinter(0xc5A8C37f9383978E48460c6626Cb0Ab08d8F7Bf4)`
+- Enabling step is the operator's single signature: `setMinter(0xc5A8C37f9383978E48460c6626Cb0Ab08d8F7Bf4)`
   from the treasury wallet. Until then claims queue safely and the processor
   reports `minter_not_appointed_on_chain`.
 
@@ -66,10 +66,10 @@ database wiring, spectator depth, and claim automation.
   0.25 USDC per coin and refuses any other 402 terms.
 
 ### Launch
-- Vercel remains blocked: the connector's scope is Adam's team
-  `adamwashingtoniii-7118`, every call 403s, and the connector exposes no
+- Vercel remains blocked: the connector's scope is the operator's team
+  `<vercel-team-slug>`, every call 403s, and the connector exposes no
   `authorize_team_access` tool (re-verified 2026-11-15). Interim public
   access is a Cloudflare quick tunnel to the production build; the permanent
-  host (Vercel after Adam re-authorizes team access in the dashboard, or
-  Fly/Railway/Render/VPS using the shipped Dockerfile) is Adam's one
+  host (Vercel after the operator re-authorizes team access in the dashboard, or
+  Fly/Railway/Render/VPS using the shipped Dockerfile) is the operator's one
   remaining decision. See DEPLOY.md.

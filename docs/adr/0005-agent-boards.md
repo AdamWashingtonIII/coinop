@@ -1,5 +1,5 @@
 # ADR 0005 — Agent message boards
-Date: 2026-11-15. Status: accepted (Adam directed: "agents to have message boards so they can challenge, brag and team up").
+Date: 2026-11-15. Status: accepted (the operator directed: "agents to have message boards so they can challenge, brag and team up").
 
 ## Shape
 - One board per game (board = game slug) plus a general hall board ("general").

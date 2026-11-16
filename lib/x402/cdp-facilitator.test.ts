@@ -28,6 +28,12 @@ function mockFetch(responseBody: unknown) {
   vi.stubGlobal("fetch", fn);
   return fn;
 }
+type Body402 = {
+  x402Version: number;
+  resource: { url: string; description: string };
+  accepts: Array<Record<string, unknown>>;
+  extensions?: { bazaar: { info: { input: { body: unknown }; output: { example: Record<string, string> } } } };
+};
 const clientPayload = { x402Version: 1, scheme: "exact", network: "base-sepolia",
   payload: { signature: "0xsig", authorization: { from: "0xabc", to: "0x312e8Efd90C134f6E54A0B612dF4f55775eC2Bd7", value: "250000", validAfter: "0", validBefore: "9999999999", nonce: "0x00" } } };
 
@@ -73,7 +79,7 @@ describe("CDP wire format", () => {
   it("402 body is v2: CAIP-2 amount requirements, resource info, bazaar extension, PAYMENT-REQUIRED header", () => {
     cdpOn();
     const reqs = paymentRequirements("stacker");
-    const body = paymentRequiredBody(reqs, "payment_required") as Record<string, any>;
+    const body = paymentRequiredBody(reqs, "payment_required") as unknown as Body402;
     expect(body.x402Version).toBe(2);
     expect(body.resource.url).toBe("https://example.test/api/coin");
     expect(body.resource.description).toContain("COINOP arcade: pay 0.25 USDC");
@@ -83,17 +89,18 @@ describe("CDP wire format", () => {
     expect(accepts.amount).toBe("250000");
     expect(accepts.maxAmountRequired).toBeUndefined();
     expect(accepts.payTo).toBe("0x312e8Efd90C134f6E54A0B612dF4f55775eC2Bd7");
-    expect(body.extensions.bazaar.info.input.body).toEqual({ gameSlug: "stacker" });
-    expect(body.extensions.bazaar.info.output.example.sessionToken).toBe("<bearer token>");
+    expect(body.extensions).toBeDefined();
+    expect(body.extensions!.bazaar.info.input.body).toEqual({ gameSlug: "stacker" });
+    expect(body.extensions!.bazaar.info.output.example.sessionToken).toBe("<bearer token>");
     const headers = paymentRequiredHeaders(body);
     expect(JSON.parse(Buffer.from(headers["PAYMENT-REQUIRED"], "base64").toString())).toEqual(body);
   });
   it("match create is discoverable; match join (per-match URL) is not", () => {
     cdpOn();
-    const create = paymentRequiredBody(matchPaymentRequirements("snake", "/api/match"), "payment_required") as Record<string, any>;
+    const create = paymentRequiredBody(matchPaymentRequirements("snake", "/api/match"), "payment_required") as unknown as Body402;
     expect(create.extensions?.bazaar.info.input.body).toEqual({ gameSlug: "snake" });
     expect(create.resource.description).toContain("versus duel");
-    const join = paymentRequiredBody(matchPaymentRequirements("snake", "/api/match/abc123/join"), "payment_required") as Record<string, any>;
+    const join = paymentRequiredBody(matchPaymentRequirements("snake", "/api/match/abc123/join"), "payment_required") as unknown as Body402;
     expect(join.extensions).toBeUndefined();
     expect(join.resource.url).toBe("https://example.test/api/match/abc123/join");
   });

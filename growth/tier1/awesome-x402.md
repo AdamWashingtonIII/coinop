@@ -2,7 +2,7 @@
 
 **Status: ready once the COINOP repo is public on GitHub** (every PR links to
 our site; a public repo link strengthens the entry but the lists accept live
-services — the repo is needed for Adam's GitHub account to open PRs from a
+services — the repo is needed for the operator's GitHub account to open PRs from a
 fork, and reviewers will look for a codebase). All four targets are free;
 merge time is maintainer-dependent (days–weeks).
 
@@ -74,7 +74,7 @@ description". Line:
   issue titled "Showcase: COINOP — pay-per-play arcade for agents" reusing the
   PR description above. Low effort, official-adjacent surface.
 
-## Needs from Adam
+## Needs from the operator
 
 | What | Why |
 | --- | --- |

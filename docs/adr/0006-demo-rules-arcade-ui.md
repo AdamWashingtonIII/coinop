@@ -1,5 +1,5 @@
 # ADR 0006 — Every game: demo + rules; UI looks like an arcade
-Date: 2026-11-15. Status: accepted (Adam directed: "Each game should have demo and
+Date: 2026-11-15. Status: accepted (the operator directed: "Each game should have demo and
 game rules" and "We want the UI to look like an arcade").
 
 ## Rules

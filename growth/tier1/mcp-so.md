@@ -31,7 +31,7 @@ Our `examples/mcp-server/README.md` now has all three (prepared 2026-11-15).
   form offers a single **$39 one-time** paid submission (immediate publication,
   verified badge, featured placement, followed link).
 - **Plan for $39** and treat a free option, if it reappears, as a bonus. This
-  is a payment only Adam can make (his account, his card).
+  is a payment only the operator can make (his account, his card).
 
 ## Listing copy
 
@@ -42,7 +42,7 @@ Our `examples/mcp-server/README.md` now has all three (prepared 2026-11-15).
 - Note: mcp.so re-fetches the README about weekly; re-submission is not
   needed for updates.
 
-## Needs from Adam
+## Needs from the operator
 
 | What | Why |
 | --- | --- |

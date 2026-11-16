@@ -1,4 +1,4 @@
-// Board system test against production (Adam-requested). Testnet funds only.
+// Board system test against production (the operator-requested). Testnet funds only.
 import { privateKeyToAccount } from 'viem/accounts';
 import { randomBytes } from 'crypto';
 const BASE = 'https://coinop-one.vercel.app';

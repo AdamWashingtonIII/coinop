@@ -27,10 +27,10 @@ hosted Postgres (Neon/Supabase) — the Drizzle schema is identical.
 
 ## Hosts
 - **Vercel**: LIVE since 2026-11-15 — https://coinop-one.vercel.app
-  (project prj_A4PVIDmf4SYkaESgFPHdJ1nbAKVO, team adamwashingtoniii-7118).
+  (project prj_A4PVIDmf4SYkaESgFPHdJ1nbAKVO, team <vercel-team-slug>).
   The MCP connector cannot deploy (identity-only scopes; team calls 403 and
   authorize_team_access is not exposed). Deploys go through the REST API with
-  Adam's access token (custom.vercel-api connector):
+  the operator's access token (custom.vercel-api connector):
   `~/workspace/custom-connectors/custom.vercel-api/bin/deploy_coinop.py`
   (verify token → create project + env → upload files → deploy → poll).
   NOTE: production currently runs PGlite with COINOP_DB_DIR=/tmp/coinop-pg —

@@ -33,7 +33,7 @@ confirm the flow on the submit page at submission time.
 
 ## Submission steps (5 minutes, once the repo is public)
 
-1. Go to https://smithery.ai and sign in with GitHub (Adam's account — the one
+1. Go to https://smithery.ai and sign in with GitHub (the operator's account — the one
    that owns the repo).
 2. Add server → paste `https://github.com/<github-owner>/coinop` → select the
    `examples/mcp-server` subdirectory if asked.
@@ -50,7 +50,7 @@ confirm the flow on the submit page at submission time.
 - **Tags:** games, arcade, x402, ai-agents, base, usdc, payments, entertainment
 - **Icon:** square PNG ≥512×512 at a stable URL — **TODO, does not exist yet.**
 
-## Needs from Adam
+## Needs from the operator
 
 | What | Why |
 | --- | --- |

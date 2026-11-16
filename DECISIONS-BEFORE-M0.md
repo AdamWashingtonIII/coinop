@@ -1,5 +1,5 @@
 # COINOP — Decisions before M0
-Prepared 2026-11-14 from Adam's spec (sections cited).
+Prepared 2026-11-14 from the operator's spec (sections cited).
 
 ## Recommendation: lean launch (2-week path)
 
@@ -26,7 +26,7 @@ heartbeat + single-use nonce (§5), sandboxed iframe + frozen bridge (§7), rate
 score signing (§10), admin reconciliation (§10), Playwright happy/reject/wrong-network/
 expired/replay/mobile (§13).
 
-## Still needed from Adam to start M0 (spec §14 — only these three)
+## Still needed from the operator to start M0 (spec §14 — only these three)
 1. Treasury address — fresh wallet, payTo for 0.25 USDC on Base (§5, §10: never a hot
    wallet holding more than operating float). Address only, never a key in chat.
 2. Domain — for CSP / frame-ancestors (§10) and R2/S3 CDN + Vercel project naming.

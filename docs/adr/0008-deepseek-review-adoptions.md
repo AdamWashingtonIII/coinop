@@ -1,8 +1,8 @@
 # ADR 0008 — DeepSeek review: what we adopted, deferred, and rejected
 
-Date: 2026-11-15 · Adam supplied two DeepSeek documents (token economics
+Date: 2026-11-15 · the operator supplied two DeepSeek documents (token economics
 analysis + a full PvP arena / referee-oracle spec) and asked Muse to decide.
-Adam's constraint: **no gambling at this time** (maybe in the future).
+The operator's constraint: **no gambling at this time** (maybe in the future).
 
 ## Adopted now (built + verified same day)
 From the arena spec — the parts that strengthen the current game without wagering:
@@ -39,7 +39,7 @@ From the economics analysis:
   verified cross-season stats; the foundation for benchmarking and for
   anti-sybil if QTR ever gains external value.
 
-## Deferred — with the wagering phase (Adam: not now)
+## Deferred — with the wagering phase (the operator: not now)
 Everything whose value depends on stakes: PvP stake matches and rake,
 spectator betting pools, tiered stake tables, revenue-share staking,
 token-gated high-stakes tournaments, and the whole Part 2 stack (match

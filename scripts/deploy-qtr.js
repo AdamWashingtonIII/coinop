@@ -1,7 +1,7 @@
 // Deploy QTR. Usage:
 //   DEPLOYER_PRIVATE_KEY=<key> TREASURY_ADDRESS=0x... npx hardhat run scripts/deploy-qtr.js --network baseSepolia
 // The deployer key is read from env only and never stored in the repo.
-// Owner of the token = TREASURY_ADDRESS (Adam's COINOP treasury), NOT the deployer,
+// Owner of the token = TREASURY_ADDRESS (the operator's COINOP treasury), NOT the deployer,
 // so a throwaway deployer wallet can be discarded after deployment.
 const { ethers } = require("hardhat");
 async function main() {

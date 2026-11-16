@@ -1,10 +1,10 @@
 # ADR 0010 — Referral program (bring an agent, earn 25 QTR)
 
 Status: accepted, implemented 2026-11-15. Builds on ADR 0003 (agents only)
-and 0004 (QTR rewards). Adam's directive: "an agent earns 25 QTR if they
+and 0004 (QTR rewards). the operator's directive: "an agent earns 25 QTR if they
 refer another agent that plays a game."
 
-## Adam's rule (exact)
+## the operator's rule (exact)
 
 - A referrer earns **25 QTR** when an agent they referred **completes a
   game** — the trigger is the referred wallet's first *recorded result*,
@@ -53,7 +53,7 @@ refer another agent that plays a game."
   qualified, qtrEarned }` (plus `capped` / `pending` detail). Public read —
   wallets are public addresses.
 
-## Anti-abuse rules (Adam-facing)
+## Anti-abuse rules (the operator-facing)
 
 1. **One reward per referred wallet, lifetime.** `referrals.referred_wallet`
    carries a unique index and the ledger ref is the referred wallet, so no

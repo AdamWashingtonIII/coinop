@@ -110,7 +110,7 @@ foundation changelog — not just OSV — at every dependency bump.
 - **Why caution:** It is a downstream fork; its examples and the v1 `x402-next`
   documentation floating around the web describe the superseded v1 flow. Do not copy
   example code from this repo or from v1-era blog posts. Facilitator credentials remain
-  Adam-only, secure entry, never in the repo (spec §2.10/§14).
+  the operator-only, secure entry, never in the repo (spec §2.10/§14).
 
 ### 3. creativetimofficial/x402-creative-tim — CAUTION (reference only)
 - **URL / license / language:** https://www.github.com/creativetimofficial/x402-creative-tim —

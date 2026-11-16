@@ -27,7 +27,7 @@ facilitator and the v2 discovery metadata below.
 
 ## The exact route at the mainnet switch
 
-1. **Adam: create a Coinbase Developer Platform (CDP) account** at
+1. **the operator: create a Coinbase Developer Platform (CDP) account** at
    portal.cdp.coinbase.com and create an API key (key ID + secret) for the
    facilitator. This is the only account step, and it belongs to the mainnet
    switch, not to marketing. (CDP facilitator pricing per Coinbase docs: first
@@ -76,11 +76,11 @@ testnet: https://www.x402scan.com/resources/register — submit the resource
 URL; it fetches the URL, validates the x402 schema, and auto-lists on success.
 No account, no fee. URLs to register (one per payable resource):
 `https://coinop-one.vercel.app/api/coin` and
-`https://coinop-one.vercel.app/api/match`. **Needs from Adam: nothing — just
+`https://coinop-one.vercel.app/api/match`. **Needs from the operator: nothing — just
 say go.** (Not submitted yet, per instructions.) A second community directory,
 x402bazaar.org, accepts submissions the same way.
 
-## Needs from Adam — summary
+## Needs from the operator — summary
 
 | When | What |
 | --- | --- |
