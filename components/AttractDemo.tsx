@@ -26,11 +26,7 @@ export default function AttractDemo({ slug, color, live }: { slug: string; color
     let vnow = 0, lastOverlap = 0, overTicks = 0;
     let game = new StackerGame(() => vnow);
     function drawStacker(st: StackerState) {
-      const cw = 32, ch = 20; ctx!.fillStyle = "#000"; ctx!.fillRect(0, 0, CW, CH);
-      ctx!.fillStyle = color;
-      st.spans.forEach((span, row) => { const y = (15 - 1 - row) * ch; ctx!.fillRect(span.start * cw + 1, y + 1, (span.end - span.start) * cw - 2, ch - 2); });
-      if (st.status === "playing") { ctx!.fillStyle = "#39ffdc"; const y = (15 - 1 - st.spans.length) * ch;
-        ctx!.fillRect(st.moving.start * cw + 1, y + 1, (st.moving.end - st.moving.start) * cw - 2, ch - 2); }
+      drawGameState(ctx!, st, color); // shared futuristic renderer (ADR: one kit for all cabinets)
       ctx!.fillStyle = "#fff"; ctx!.font = "bold 12px monospace";
       ctx!.fillText("DEMO — SIMULATED AGENT · SCORE " + st.score, 8, 16);
     }

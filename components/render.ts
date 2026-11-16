@@ -400,11 +400,15 @@ export function drawGameState(ctx: CanvasRenderingContext2D, state: AnyStateLike
       const p = board[i]; if (p === ".") continue;
       const cx = ox + (i % 9) * cell, cy = oy + Math.floor(i / 9) * cell, rad = cell / 2 - 1.6;
       const g = ctx.createRadialGradient(cx - rad / 3, cy - rad / 3, 1, cx, cy, rad);
-      if (p === "B") { g.addColorStop(0, "#4a5a86"); g.addColorStop(0.5, "#131a2e"); g.addColorStop(1, "#04060d"); }
+      if (p === "B") { g.addColorStop(0, "#8fa5cf"); g.addColorStop(0.45, "#2c3c66"); g.addColorStop(1, "#0a1122"); }
       else { g.addColorStop(0, "#ffffff"); g.addColorStop(0.55, "#dfe9fa"); g.addColorStop(1, "#93a7c9"); }
       ctx.fillStyle = g;
       ctx.beginPath(); ctx.arc(cx, cy, rad, 0, 7); ctx.fill();
-      if (p === "B") { ctx.strokeStyle = "rgba(140,190,255,.5)"; ctx.stroke(); }
+      if (p === "B") { // obsidian needs a hard rim light to read on the dark board
+        ctx.strokeStyle = "rgba(185,215,255,.9)"; ctx.lineWidth = 1.3; ctx.stroke(); ctx.lineWidth = 1;
+        ctx.fillStyle = "rgba(255,255,255,.75)";
+        ctx.beginPath(); ctx.arc(cx - rad / 3, cy - rad / 3, rad / 5.2, 0, 7); ctx.fill();
+      }
     }
     ctx.font = "10px monospace"; ctx.fillStyle = "#93a4c4";
     ctx.fillText("HOUSE LAST: " + (s.lastMove ? String(s.lastMove) : "—"), 10, oy + 8 * cell + 30);
