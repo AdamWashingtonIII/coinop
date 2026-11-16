@@ -1,0 +1,16 @@
+<!doctype html><meta charset="utf-8"><title>breaker</title>
+<body style="margin:0;background:#000;color:#39ffdc;font-family:monospace;display:grid;place-items:center;height:100vh">
+<div><div id="t">ATTRACT MODE</div><div id="s">SCORE 0</div></div>
+<script>
+// Stub game — M0 only. Implements the frozen bridge (spec section 7): attract mode never touches storage,
+// game stays paused until SESSION_GRANTED, always posts GAME_OVER on quit.
+let playing = false, score = 0;
+addEventListener("message", (e) => {
+  const d = e.data || {};
+  if (d.type === "INIT") parent.postMessage({ type: "READY" }, "*");
+  if (d.type === "SESSION_GRANTED") { playing = true; document.getElementById("t").textContent = "PLAYING"; parent.postMessage({ type: "STARTED" }, "*"); }
+  if (d.type === "PAUSE") playing = false;
+});
+setInterval(() => { if (playing) { score += 10; document.getElementById("s").textContent = "SCORE " + score; parent.postMessage({ type: "SCORE", value: score }, "*"); } }, 500);
+addEventListener("beforeunload", () => parent.postMessage({ type: "GAME_OVER", finalScore: score }, "*"));
+</script></body>

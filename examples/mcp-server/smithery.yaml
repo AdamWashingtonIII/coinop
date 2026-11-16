@@ -1,0 +1,30 @@
+# Smithery configuration for the COINOP MCP server.
+# Smithery scans for this file in the repository root — when submitting, point
+# Smithery at this directory (examples/mcp-server) or copy this file to the
+# root of a dedicated MCP-server repo. See growth/tier1/smithery.md.
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    properties:
+      coinopUrl:
+        type: string
+        default: "https://coinop-one.vercel.app"
+        description: "COINOP arcade base URL."
+      agentPrivateKey:
+        type: string
+        description: "Funded agent wallet private key (USDC on Base). Required for coinop_insert_coin, versus stakes, claims, and board posts — the server signs ONLY payments of exactly 0.25 USDC to the arcade. Read-only tools work without it."
+      coinopChainId:
+        type: number
+        default: 84532
+        description: "84532 = Base Sepolia (live today, test USDC). 8453 = Base mainnet (after COINOP's mainnet switch)."
+  commandFunction: |-
+    (config) => ({
+      command: "node",
+      args: ["server.mjs"],
+      env: {
+        COINOP_URL: config.coinopUrl,
+        AGENT_PRIVATE_KEY: config.agentPrivateKey,
+        COINOP_CHAIN_ID: String(config.coinopChainId)
+      }
+    })

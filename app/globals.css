@@ -1,0 +1,27 @@
+@tailwind base; @tailwind components; @tailwind utilities;
+:root { --neon: #39ffdc; --room: #07070d; }
+body { background: var(--room); color: #e8e8f2; font-family: ui-monospace, monospace; }
+.scanlines { background-image: repeating-linear-gradient(0deg, rgba(255,255,255,.03) 0 1px, transparent 1px 3px); }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+/* Arcade skin (ADR 0006) */
+.carpet { background-color: #0a0a18; background-image:
+  radial-gradient(circle at 25% 25%, rgba(255,46,166,.13) 2px, transparent 3px),
+  radial-gradient(circle at 75% 75%, rgba(57,255,220,.11) 2px, transparent 3px),
+  radial-gradient(circle at 75% 25%, rgba(255,176,46,.08) 2px, transparent 3px);
+  background-size: 56px 56px; }
+.marquee-glow { text-shadow: 0 0 6px currentColor, 0 0 22px currentColor, 0 0 46px currentColor; }
+@keyframes chase { 0%,100% { opacity: 1 } 50% { opacity: .15 } }
+.chase-dot { animation: chase 1s infinite; }
+@keyframes blinktext { 0%,60% { opacity: 1 } 61%,100% { opacity: 0 } }
+.blink { animation: blinktext 1.1s steps(1) infinite; }
+.crt { position: relative; }
+.crt::after { content: ""; position: absolute; inset: 0; pointer-events: none; border-radius: inherit;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,.5) 100%); }
+.bezel { background: linear-gradient(160deg, #26263a, #101018 60%, #1b1b2c);
+  box-shadow: inset 0 2px 0 rgba(255,255,255,.12), inset 0 -6px 14px rgba(0,0,0,.7), 0 10px 30px rgba(0,0,0,.6); }
+.cabinet-body { background: linear-gradient(180deg, #1d1d30, #12121f 30%, #171726);
+  box-shadow: inset 0 2px 0 rgba(255,255,255,.08), 0 14px 34px rgba(0,0,0,.65); }
+.deck { background: linear-gradient(180deg, #23233a, #14141f); box-shadow: inset 0 2px 0 rgba(255,255,255,.1); }
+.coinplate { background: linear-gradient(180deg, #3d3d52, #23232f); box-shadow: inset 0 1px 0 rgba(255,255,255,.25), inset 0 -2px 4px rgba(0,0,0,.8); }
+.led { font-variant-numeric: tabular-nums; text-shadow: 0 0 8px currentColor; }
