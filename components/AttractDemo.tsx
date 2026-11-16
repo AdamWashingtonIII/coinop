@@ -217,24 +217,47 @@ export default function AttractDemo({ slug, color, live }: { slug: string; color
       drawGameState(ctx!, checkers.state(), color);
     }
     // --- go: real engine, bot plays seeded legal points ---
-    let goOverTicks = 0, goSeed = 41, goTry = 0;
+    let goOverTicks = 0, goSeed = 41, goStep = 0;
     let go = new GoGame(() => 0, goSeed);
-    function stepGo() {
+    // The demo bot plays presentable Go: scripted corner openings, then moves
+    // that extend its own stones — each candidate is tested on a cloned
+    // position and only played if the stone survives the house's reply there.
+    // (A random picker gets captured in bulk by the reactive house and leaves
+    // a board of only white stones, which reads as a rendering bug.)
+    const GO_OPENING = [20, 24, 56, 60, 40, 22, 58, 38, 42];
+    function goPick(): boolean {
       const st = go.state();
-      if (st.status === "over") { goOverTicks++;
+      const empties: number[] = [];
+      for (let i = 0; i < 81; i++) if (st.board[i] === ".") empties.push(i);
+      const adj = (i: number, who: string) => {
+        const x = i % 9, y = Math.floor(i / 9);
+        return [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => {
+          const nx = x + dx, ny = y + dy;
+          return nx >= 0 && ny >= 0 && nx < 9 && ny < 9 && (who === "any" ? st.board[ny * 9 + nx] !== "." : st.board[ny * 9 + nx] === who);
+        });
+      };
+      const tiers = [GO_OPENING.filter((i) => st.board[i] === "."),
+        empties.filter((i) => adj(i, "B")), empties.filter((i) => adj(i, "any")), empties];
+      const salt = goSeed + goStep * 13;
+      for (const tier of tiers) {
+        for (let k = 0; k < Math.min(tier.length, 14); k++) {
+          const i = tier[(salt + k * 7) % tier.length];
+          const probe = GoGame.fromBoard(st.board, { byYou: st.prisonersByYou, byHouse: st.prisonersByHouse }, () => 0, salt + k + 1);
+          try { probe.act("play_" + i); } catch { continue; }
+          if (probe.state().board[i] !== "B") continue;
+          try { go.act("play_" + i); return true; } catch { /* the real reply differs */ }
+        }
+      }
+      return false;
+    }
+    function stepGo() {
+      goStep++;
+      const st = go.state();
+      if (st.status === "over" || st.prisonersByHouse >= 8) { goOverTicks++;
         if (goOverTicks > 12) { goSeed = (goSeed * 1103515245 + 12345) % 2147483648; go = new GoGame(() => 0, goSeed); goOverTicks = 0; }
         drawGameState(ctx!, go.state(), color); return; }
       const stones = st.board.split("").filter((c) => c !== ".").length;
-      if (stones > 62) { go.act("pass"); }
-      else {
-        let placed = false;
-        for (let k = 0; k < 12 && !placed; k++) {
-          goTry = (goTry * 1103515245 + 12345) % 81;
-          if (st.board[goTry] !== ".") continue;
-          try { go.act("play_" + goTry); placed = true; } catch { /* illegal point — try another */ }
-        }
-        if (!placed) go.act("pass");
-      }
+      if (stones > 62 || !goPick()) { try { go.act("pass"); } catch { /* already over */ } }
       drawGameState(ctx!, go.state(), color);
     }
     const sims: Record<string, () => void> = { asteroids: simAsteroids, runner: simRunner, whack: simWhack };
