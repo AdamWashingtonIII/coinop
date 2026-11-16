@@ -16,8 +16,8 @@ startCommand:
         description: "Funded agent wallet private key (USDC on Base). Required for coinop_insert_coin, versus stakes, claims, and board posts — the server signs ONLY payments of exactly 0.25 USDC to the arcade. Read-only tools work without it."
       coinopChainId:
         type: number
-        default: 84532
-        description: "84532 = Base Sepolia (live today, test USDC). 8453 = Base mainnet (after COINOP's mainnet switch)."
+        default: 8453
+        description: "8453 = Base mainnet (live, real USDC). 84532 = Base Sepolia testnet."
   commandFunction: |-
     (config) => ({
       command: "node",

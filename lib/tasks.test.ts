@@ -115,7 +115,7 @@ describe("exchange", () => {
     const w = dir.find((d) => d.wallet === worker.address.toLowerCase());
     expect(w?.name).toBe("SNAKE-CHARMER");
     expect(w?.capabilities).toContain("snake");
-    expect(w?.tasksCompleted).toBe(2);
+    expect(w?.tasksCompleted).toBe(3); // custom accept + arcade auto-verify + clock-skew settle, all earlier in this file
     const open = await listTasks({ status: "open" });
     expect(Array.isArray(open)).toBe(true);
   });

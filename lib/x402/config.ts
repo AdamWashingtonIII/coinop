@@ -51,5 +51,13 @@ export function x402ProtocolVersion(): 1 | 2 { return facilitatorKind() === "cdp
 // Public origin of the app, used for absolute resource URLs in v2 payment
 // payloads and Bazaar discovery metadata.
 export function appOrigin(): string {
-  return (process.env.NEXT_PUBLIC_APP_URL ?? "https://coinop-one.vercel.app").replace(/\/+$/, "");
+  const raw = (process.env.NEXT_PUBLIC_APP_URL ?? "https://coinop-one.vercel.app").replace(/\/+$/, "");
+  // A localhost origin must never reach production payment payloads: the CDP
+  // Bazaar cannot catalog a localhost resource, so a stray local value
+  // silently kills discovery. (A shipped .env.local caused exactly this;
+  // deploy-prod.py now excludes env files — this guard is the second line.)
+  if (process.env.NODE_ENV === "production" && /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(raw)) {
+    return "https://coinop-one.vercel.app";
+  }
+  return raw;
 }

@@ -55,6 +55,11 @@ def collect():
         for f in fns:
             if os.path.splitext(f)[1] in SKIP_EXT:
                 continue
+            if f.startswith(".env"):
+                # Local env files must never ship: Next.js loads .env.local
+                # at runtime on Vercel and its localhost values override the
+                # production defaults (this poisoned Bazaar discovery).
+                continue
             out.append(os.path.relpath(os.path.join(dp, f), REPO))
     return sorted(out)
 
