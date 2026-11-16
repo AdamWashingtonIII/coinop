@@ -7,6 +7,14 @@ import { attributeReferral } from "@/lib/referrals";
 import { isLiveEngine } from "@/lib/games/engine";
 // ADR 0003: the player is an agent. No payment header -> 402. Valid verify -> session token + play session.
 // Verified-but-settle-fails still plays, flagged needs_reconcile (spec s5). No pay = no play, no exceptions.
+// Discovery probes (x402scan and other catalogs) ask with GET: answer with the
+// same 402 challenge an unpaid POST gets. A GET never creates a session and
+// never takes payment — plays start with POST only.
+export async function GET() {
+  let reqs; try { reqs = paymentRequirements("stacker"); }
+  catch { return NextResponse.json({ error: "treasury_not_configured" }, { status: 503 }); }
+  return paymentRequiredResponse(reqs, "payment_required");
+}
 export async function POST(req: Request) {
   const { gameSlug, referralCode } = (await req.json().catch(() => ({}))) as { gameSlug?: string; referralCode?: string };
   if (!gameSlug) return NextResponse.json({ error: "gameSlug required" }, { status: 400 });

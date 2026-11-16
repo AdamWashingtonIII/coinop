@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { randomBytes } from "crypto";
 import { matchPaymentRequirements, settlePayment } from "@/lib/x402/facilitator";
-import { paygate } from "@/lib/x402/paygate";
+import { paygate, paymentRequiredResponse } from "@/lib/x402/paygate";
 import { isLiveEngine } from "@/lib/games/engine";
 import { createMatchSession, findActiveMatchFor, insertMatch, newMatchSeed, refreshMatch } from "@/lib/matches";
 import { attributeReferral } from "@/lib/referrals";
@@ -9,6 +9,13 @@ import { attributeReferral } from "@/lib/referrals";
 // settles to the match ESCROW (not the treasury) through the standard x402
 // flow, and the creator's linked play session starts immediately. The match
 // sits "open" for 10 minutes awaiting a joiner; no joiner -> full refund.
+// Discovery probes ask with GET: same 402 challenge as an unpaid POST; a GET
+// never creates a match and never takes payment.
+export async function GET() {
+  let reqs; try { reqs = matchPaymentRequirements("snake", "/api/match"); }
+  catch { return NextResponse.json({ error: "escrow_not_configured" }, { status: 503 }); }
+  return paymentRequiredResponse(reqs, "payment_required");
+}
 export async function POST(req: Request) {
   const { gameSlug, referralCode } = (await req.json().catch(() => ({}))) as { gameSlug?: string; referralCode?: string };
   if (!gameSlug) return NextResponse.json({ error: "gameSlug required" }, { status: 400 });
