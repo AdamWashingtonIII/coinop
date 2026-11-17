@@ -15,6 +15,16 @@ export const FEE_RATE = 0.10;
 export const MIN_BOUNTY = 10, MAX_BOUNTY = 1000;
 export const CLAIM_HOLD_MS = 2 * 3600_000;
 export const MAX_ACTIVE_CLAIMS = 3;
+// ADR 0017: claiming locks a worker stake, tiered by lifetime completions —
+// the anti-griefing mechanism every surviving agent board uses. Brand-new
+// workers also face a bounty cap until they have one completion on record.
+export const NEW_WORKER_MAX_BOUNTY = 100;
+export function stakeRateFor(completed: number): number {
+  return completed <= 0 ? 0.30 : completed < 5 ? 0.20 : 0.10;
+}
+export function stakeFor(bounty: number, completed: number): number {
+  return Math.ceil(bounty * stakeRateFor(completed));
+}
 const treasury = () => (process.env.TREASURY_ADDRESS ?? "").toLowerCase();
 
 export type TaskType = "arcade_score" | "custom";
@@ -22,18 +32,35 @@ export type TaskStatus = "open" | "claimed" | "submitted" | "settled" | "refunde
 export interface Task {
   id: string; poster: string; worker: string | null; type: TaskType; title: string; description: string;
   bounty: number; fee: number; status: TaskStatus; spec: Record<string, unknown>;
+  stake: number | null; // ADR 0017: QTR stake locked by the worker at claim (null until claimed)
   submission: string | null; rejectReason: string | null;
   deadline: number; claimExpires: number | null; createdAt: number;
   claimedAt: number | null; submittedAt: number | null; settledAt: number | null;
 }
 type Row = typeof schema.tasks.$inferSelect;
-const toTask = (r: Row): Task => ({
+const specOf = (r: Row): Record<string, unknown> => (r.spec as Record<string, unknown>) ?? {};
+const stakeOf = (r: Row): number => { const s = specOf(r).stake; return typeof s === "number" ? s : 0; };
+const toTask = (r: Row): Task => { const spec = specOf(r); return {
   id: r.id, poster: r.poster, worker: r.worker, type: r.type as TaskType, title: r.title, description: r.description,
   bounty: r.bounty, fee: Math.floor(r.bounty * FEE_RATE), status: r.status as TaskStatus,
-  spec: (r.spec as Record<string, unknown>) ?? {}, submission: r.submission, rejectReason: r.rejectReason,
+  spec, stake: typeof spec.stake === "number" ? spec.stake : null,
+  submission: r.submission, rejectReason: r.rejectReason,
   deadline: r.deadline.getTime(), claimExpires: r.claimExpires?.getTime() ?? null, createdAt: r.createdAt.getTime(),
   claimedAt: r.claimedAt?.getTime() ?? null, submittedAt: r.submittedAt?.getTime() ?? null, settledAt: r.settledAt?.getTime() ?? null,
-});
+}; };
+// Stake settlement (ADR 0017): the lock already debited the worker at claim,
+// so a return credits it back and a slash credits the treasury — the same
+// sink as the task fee. A slash with no treasury configured burns the stake,
+// mirroring how an unconfigured treasury already drops the fee.
+async function returnStake(r: Row): Promise<void> {
+  const s = stakeOf(r);
+  if (r.worker && s > 0) await taskLedger(r.worker, s, "task_stake_return", r.id);
+}
+async function slashStake(r: Row): Promise<void> {
+  const s = stakeOf(r);
+  const t = treasury();
+  if (r.worker && s > 0 && t) await taskLedger(t, s, "task_stake_slash", r.id);
+}
 
 // ---------- wallet-signature auth (one-time nonces, same shape as claims) ----------
 export async function issueTaskNonce(wallet: string): Promise<{ nonce: string; message: string; expiresAt: number }> {
@@ -75,8 +102,14 @@ export async function settleExpired(now = Date.now()): Promise<void> {
       const holdLapsed = r.claimExpires !== null && r.claimExpires.getTime() <= now;
       if (deadline <= now) await refund(r, "expired");
       else if (holdLapsed) {
-        await db.update(schema.tasks).set({ status: "open", worker: null, claimedAt: null, claimExpires: null })
-          .where(and(eq(schema.tasks.id, r.id), eq(schema.tasks.status, "claimed")));
+        // The claim lapsed with no submission — the griefing case (ADR 0017):
+        // the stake is slashed to the treasury and the task reopens clean.
+        // (Copy the spec before deleting: specOf returns the row's own object,
+        // and slashStake still needs to read the stake from it.)
+        const spec = { ...specOf(r) }; delete spec.stake;
+        const upd = await db.update(schema.tasks).set({ status: "open", worker: null, claimedAt: null, claimExpires: null, spec })
+          .where(and(eq(schema.tasks.id, r.id), eq(schema.tasks.status, "claimed"))).returning();
+        if (upd.length) await slashStake(r);
       }
     }
   }
@@ -84,21 +117,30 @@ export async function settleExpired(now = Date.now()): Promise<void> {
 function inArrayStatus() {
   return sql`${schema.tasks.status} in ('open','claimed')`;
 }
-async function refund(r: Row, status: "refunded" | "expired"): Promise<void> {
+// Refunds the poster's locked bounty. A task refunded while claimed (it can
+// only be claimed-and-unsubmitted here — submitted tasks leave this path)
+// settles the worker's stake per stakeMode: "slash" for expiry (the claim
+// died unworked), "return" when the poster themselves cancels a live claim.
+async function refund(r: Row, status: "refunded" | "expired", stakeMode: "slash" | "return" = "slash"): Promise<void> {
   const db = await getDb();
   const upd = await db.update(schema.tasks).set({ status, settledAt: new Date() })
     .where(and(eq(schema.tasks.id, r.id), sql`${schema.tasks.status} in ('open','claimed')`)).returning();
-  if (upd.length) await taskLedger(r.poster, r.bounty, "task_refund", r.id);
+  if (!upd.length) return;
+  await taskLedger(r.poster, r.bounty, "task_refund", r.id);
+  if (r.status === "claimed") {
+    if (stakeMode === "return") await returnStake(r); else await slashStake(r);
+  }
 }
 async function payOut(r: Row): Promise<void> {
   const fee = Math.floor(r.bounty * FEE_RATE);
   await taskLedger(r.worker!, r.bounty - fee, "task_pay", r.id);
   const t = treasury();
   if (t && fee > 0) await taskLedger(t, fee, "task_fee", r.id);
+  await returnStake(r); // ADR 0017: a settled task always returns the stake
 }
 
 // ---------- mutations ----------
-export interface PostInput { type: TaskType; title: string; description: string; bounty: number; deadlineHours: number; spec?: Record<string, unknown> }
+export interface PostInput { type: TaskType; title: string; description: string; bounty: number; deadlineHours: number; spec?: Record<string, unknown>; deliverable?: string; acceptance?: string }
 export async function postTask(wallet: string, nonce: string, signature: string, input: PostInput): Promise<Task> {
   const w = await verifyTaskAuth(wallet, nonce, signature);
   await settleExpired();
@@ -118,6 +160,15 @@ export async function postTask(wallet: string, nonce: string, signature: string,
     if (!Number.isFinite(minScore) || minScore < 1 || minScore > 100000) throw new Error("bad_min_score");
     spec.gameSlug = slug; spec.minScore = minScore;
   }
+  if (input.type === "custom") {
+    // ADR 0017: structured schema — what the worker must hand back and how
+    // the poster will judge it. Optional, capped, stored in the spec so GET
+    // responses and the board render them with no schema change.
+    const deliverable = String(input.deliverable ?? "").trim().slice(0, 280);
+    const acceptance = String(input.acceptance ?? "").trim().slice(0, 280);
+    if (deliverable) spec.deliverable = deliverable;
+    if (acceptance) spec.acceptance = acceptance;
+  }
   if ((await availableToClaim(w)) < bounty) throw new Error("insufficient_qtr");
   const db = await getDb();
   const t: Row = { id: id(), poster: w, worker: null, type: input.type, title, description, bounty,
@@ -136,6 +187,13 @@ async function getRow(taskId: string): Promise<Row> {
   return rows[0];
 }
 
+async function completedCount(w: string): Promise<number> {
+  const db = await getDb();
+  const rows = await db.select({ id: schema.tasks.id }).from(schema.tasks)
+    .where(and(eq(schema.tasks.worker, w), eq(schema.tasks.status, "settled")));
+  return rows.length;
+}
+
 export async function claimTask(wallet: string, nonce: string, signature: string, taskId: string): Promise<Task> {
   const w = await verifyTaskAuth(wallet, nonce, signature);
   await settleExpired();
@@ -146,10 +204,20 @@ export async function claimTask(wallet: string, nonce: string, signature: string
   const active = await db.select({ id: schema.tasks.id }).from(schema.tasks)
     .where(and(eq(schema.tasks.worker, w), eq(schema.tasks.status, "claimed")));
   if (active.length >= MAX_ACTIVE_CLAIMS) throw new Error("too_many_claims");
+  // ADR 0017: tiered stake. New workers (0 completions) stake 30% and may not
+  // claim bounties over the new-worker cap; the rate falls to 20% at 1–4
+  // completions and 10% at 5+. The stake locks from the worker's own
+  // claimable balance, exactly like a poster's bounty lock.
+  const completed = await completedCount(w);
+  if (completed === 0 && r.bounty > NEW_WORKER_MAX_BOUNTY) throw new Error("new_worker_cap");
+  const stake = stakeFor(r.bounty, completed);
+  if ((await availableToClaim(w)) < stake) throw new Error("insufficient_stake");
+  const spec = { ...specOf(r), stake };
   const upd = await db.update(schema.tasks)
-    .set({ status: "claimed", worker: w, claimedAt: new Date(), claimExpires: new Date(Date.now() + CLAIM_HOLD_MS) })
+    .set({ status: "claimed", worker: w, claimedAt: new Date(), claimExpires: new Date(Date.now() + CLAIM_HOLD_MS), spec })
     .where(and(eq(schema.tasks.id, taskId), eq(schema.tasks.status, "open"))).returning();
   if (!upd.length) throw new Error("not_open");
+  await taskLedger(w, -stake, "task_stake_lock", taskId);
   return toTask(upd[0]);
 }
 
@@ -216,6 +284,7 @@ export async function rejectTask(wallet: string, nonce: string, signature: strin
     .where(and(eq(schema.tasks.id, taskId), eq(schema.tasks.status, "submitted"))).returning();
   if (!upd.length) throw new Error("not_submitted");
   await taskLedger(w, r.bounty, "task_refund", taskId);
+  await returnStake(r); // ADR 0017: a rejected submission still returns the stake
   return toTask(upd[0]);
 }
 
@@ -223,10 +292,30 @@ export async function cancelTask(wallet: string, nonce: string, signature: strin
   const w = await verifyTaskAuth(wallet, nonce, signature);
   await settleExpired();
   const r = await getRow(taskId);
-  if (r.poster !== w) throw new Error("not_poster");
-  if (r.status !== "open") throw new Error("not_open");
-  await refund(r, "refunded");
-  return toTask(await getRow(taskId));
+  if (r.poster === w) {
+    // Poster cancel: an open task just refunds; a live claim also refunds,
+    // and the worker's stake is returned — the poster ended it, not them.
+    if (r.status === "open") await refund(r, "refunded");
+    else if (r.status === "claimed") await refund(r, "refunded", "return");
+    else throw new Error("not_open");
+    return toTask(await getRow(taskId));
+  }
+  if (r.worker === w) {
+    // Worker releasing their own unsubmitted claim (ADR 0017): the task
+    // reopens for someone else, but the stake is slashed — releasing a claim
+    // is never free, or claims become a griefing tool. A submitted task is
+    // the poster's call, not the worker's.
+    if (r.status !== "claimed") throw new Error("not_your_claim");
+    const db = await getDb();
+    const spec = { ...specOf(r) }; delete spec.stake; // copy: slashStake reads the stake from r.spec below
+    const upd = await db.update(schema.tasks)
+      .set({ status: "open", worker: null, claimedAt: null, claimExpires: null, spec })
+      .where(and(eq(schema.tasks.id, taskId), eq(schema.tasks.status, "claimed"), eq(schema.tasks.worker, w))).returning();
+    if (!upd.length) throw new Error("not_your_claim");
+    await slashStake(r);
+    return toTask(upd[0]);
+  }
+  throw new Error("not_poster");
 }
 
 // ---------- reads ----------

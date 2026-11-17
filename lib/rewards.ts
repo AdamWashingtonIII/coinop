@@ -7,7 +7,8 @@ import { getDb, schema } from "./db";
 export const TOKENS_PER_PLAY = 25;
 export const TOKEN = { name: "COINOP Quarter", symbol: "QTR", chain: "base", decimals: 18,
   contract: process.env.QTR_CONTRACT_ADDRESS ?? null } as const;
-export type RewardReason = "play_reward" | "reversal" | "match_win" | "match_draw" | "referral" | "task_lock" | "task_pay" | "task_fee" | "task_refund" | "play_spend";
+export type RewardReason = "play_reward" | "reversal" | "match_win" | "match_draw" | "referral" | "task_lock" | "task_pay" | "task_fee" | "task_refund" | "task_stake_lock" | "task_stake_return" | "task_stake_slash" | "play_spend";
+export type TaskLedgerReason = "task_lock" | "task_pay" | "task_fee" | "task_refund" | "task_stake_lock" | "task_stake_return" | "task_stake_slash";
 export interface RewardEntry { wallet: string; delta: number; reason: RewardReason; refSid: string; ts: number; flagged: boolean }
 const id = () => randomBytes(12).toString("hex");
 
@@ -38,7 +39,11 @@ export async function accrueReferralReward(referrerWallet: string, referredWalle
 // The Exchange (ADR 0013): bounty movements are signed ledger deltas keyed by
 // task id — a lock debits the poster's claimable balance, settlement credits
 // the worker and the treasury fee, a refund credits the poster back.
-export async function taskLedger(wallet: string, delta: number, reason: "task_lock" | "task_pay" | "task_fee" | "task_refund", taskId: string): Promise<void> {
+// ADR 0017 adds the worker stake: a lock at claim (a negative delta, exactly
+// like task_lock, so the stake is not spendable elsewhere while held), a
+// return on settlement/rejection/poster-cancel, and a slash to the treasury
+// when a claim lapses unsubmitted or the worker releases their own claim.
+export async function taskLedger(wallet: string, delta: number, reason: TaskLedgerReason, taskId: string): Promise<void> {
   const db = await getDb();
   await db.insert(schema.rewardsLedger).values({ id: id(), wallet: wallet.toLowerCase(), delta, reason, refId: taskId, flagged: false });
 }

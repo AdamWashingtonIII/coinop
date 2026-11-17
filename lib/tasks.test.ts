@@ -17,7 +17,7 @@ async function sign(a: ReturnType<typeof privateKeyToAccount>) {
 async function fund(a: ReturnType<typeof privateKeyToAccount>, plays: number) {
   for (let i = 0; i < plays; i++) await accruePlayReward(a.address, "seed-" + a.address + "-" + i + "-" + Math.random());
 }
-beforeAll(async () => { await fund(poster, 8); await fund(third, 2); }); // poster 200 QTR, third 50
+beforeAll(async () => { await fund(poster, 8); await fund(worker, 8); await fund(third, 2); }); // poster 200 QTR, worker 200 (ADR 0017: claims lock a stake), third 50
 
 describe("exchange", () => {
   it("posts with a lock, settles a custom task with the 10% fee", async () => {
@@ -30,13 +30,15 @@ describe("exchange", () => {
     const s2 = await sign(worker);
     const claimed = await claimTask(worker.address, s2.nonce, s2.signature, t.id);
     expect(claimed.status).toBe("claimed");
+    expect(claimed.stake).toBe(30); // ADR 0017: new worker stakes 30% of 100
+    expect(await rewardBalance(worker.address)).toBe(170); // stake locked out of the balance
     const s3 = await sign(worker);
     const submitted = await submitTask(worker.address, s3.nonce, s3.signature, t.id, "rain on rooftops");
     expect(submitted.status).toBe("submitted");
     const s4 = await sign(poster);
     const settled = await acceptTask(poster.address, s4.nonce, s4.signature, t.id);
     expect(settled.status).toBe("settled");
-    expect(await rewardBalance(worker.address)).toBe(90); // 100 - 10% fee
+    expect(await rewardBalance(worker.address)).toBe(290); // 200 funded + (100 - 10% fee); the 30 stake came back at settlement
     expect(await rewardBalance(process.env.TREASURY_ADDRESS!)).toBe(10);
     const stats = await taskStats();
     expect(stats.settled).toBe(1); expect(stats.qtrVolume).toBe(100); expect(stats.feesEarned).toBe(10);
@@ -94,7 +96,9 @@ describe("exchange", () => {
     const s3 = await sign(worker);
     const settled = await submitTask(worker.address, s3.nonce, s3.signature, t.id, "new-sid");
     expect(settled.status).toBe("settled");
-    expect((await rewardBalance(worker.address)) - before).toBe(36);
+    // 36 = 40 bounty - 4 fee, plus the 8 QTR stake (1 completion → 20% tier)
+    // that settlement returns — `before` was read after the claim locked it.
+    expect((await rewardBalance(worker.address)) - before).toBe(44);
   });
   it("clock-skew grace: a run recorded seconds before the claim still verifies", async () => {
     const s1 = await sign(poster);
