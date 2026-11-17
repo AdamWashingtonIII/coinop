@@ -480,9 +480,12 @@ export function drawGameState(ctx: CanvasRenderingContext2D, state: AnyStateLike
     const sorted = [...rivals].filter((r) => r.relS >= 0 && r.relS < (N - 1) * 10).sort((a, b) => b.relS - a.relS);
     for (const r of sorted) {
       const k = r.relS / 10;
-      drawCar(cxAt(k) + r.lat * wAt(k), yAt(k), Math.max(3, wAt(k) * 0.36), r.color, false);
+      drawCar(cxAt(k) + r.lat * wAt(k), yAt(k), Math.max(5, wAt(k) * 0.36), r.color, false);
     }
-    const pk = 2.2, px = cxAt(pk) + lat * wAt(pk) * 0.94, py = yAt(pk);
+    // The drawn offset clamps at the rumble strip: fully off track (|lat| up
+    // to 1.3) would otherwise push the hero car off the canvas edge.
+    const visLat = Math.max(-1.08, Math.min(1.08, lat));
+    const pk = 2.2, px = cxAt(pk) + visLat * wAt(pk) * 0.94, py = yAt(pk);
     ctx.save();
     ctx.translate(px, py); ctx.rotate(((s.steer as number) || 0) * 0.05); ctx.translate(-px, -py);
     drawCar(px, py, wAt(pk) * 0.40, color, true);
