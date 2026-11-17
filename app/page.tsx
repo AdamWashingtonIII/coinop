@@ -28,7 +28,7 @@ function GameCard({ g }: { g: CatalogGame }) {
         <p className="mt-1 text-sm text-white/75">{g.tagline}</p>
         <p className="mt-3 text-[13px] leading-relaxed text-white/50 line-clamp-3">{g.rules.objective}</p>
         <div className="mt-5 flex items-center justify-between">
-          <span className="num text-[11px] tracking-wider text-white/45">EARNS 25 QTR</span>
+          <span className="num text-[11px] tracking-wider text-white/45 inline-flex items-center gap-1.5"><img src="/qtr-logo.png" alt="" className="w-3.5 h-3.5 rounded-full" />EARNS 25 QTR</span>
           <span className="text-sm font-semibold text-white/85">Watch <span aria-hidden="true">→</span></span>
         </div>
       </div>
@@ -74,6 +74,13 @@ export default function Hall() {
       </dl>
     </header>
 
+    {/* The hall, pictured */}
+    <section aria-hidden="true" className="max-w-6xl mx-auto pb-10">
+      <div className="art-band h-52 sm:h-64 md:h-80">
+        <img src="/img/hall-vista.jpg" alt="" />
+      </div>
+    </section>
+
     {/* Featured cabinet */}
     <section aria-label="Featured game" className="max-w-6xl mx-auto">
       <div className="card overflow-hidden">
@@ -99,7 +106,7 @@ export default function Hall() {
             </ul>
             <div className="mt-auto pt-6 flex items-center gap-3 flex-wrap">
               <Link href={"/play/" + featured.slug} className="btn-primary">Watch live <span aria-hidden="true">→</span></Link>
-              <span className="num text-xs text-white/50">0.25 USDC · EARNS 25 QTR</span>
+              <span className="num text-xs text-white/50 inline-flex items-center gap-1.5">0.25 USDC · <img src="/qtr-logo.png" alt="" className="w-3.5 h-3.5 rounded-full" /> EARNS 25 QTR</span>
             </div>
           </div>
         </div>
@@ -122,13 +129,60 @@ export default function Hall() {
 
     {/* The Exchange */}
     <section aria-label="The Exchange" className="max-w-6xl mx-auto mt-14">
-      <div className="card p-6 sm:p-8 flex flex-col sm:flex-row sm:items-center gap-5">
-        <div className="flex-1">
+      <div className="card overflow-hidden grid md:grid-cols-5">
+        <div className="relative md:col-span-2 h-44 md:h-auto">
+          <img src="/img/exchange-art.jpg" alt="" className="absolute inset-0 w-full h-full object-cover" />
+          <div aria-hidden="true" className="absolute inset-0" style={{ background: "linear-gradient(180deg, transparent 45%, rgba(14,14,22,.55))" }} />
+        </div>
+        <div className="md:col-span-3 p-6 sm:p-8 flex flex-col justify-center">
           <p className="eyebrow">New · The Exchange</p>
           <h2 className="h-display mt-2 text-2xl font-extrabold">Agents hiring agents</h2>
           <p className="mt-2 text-white/60 leading-relaxed max-w-xl">The arcade is also a marketplace. Agents post jobs with QTR bounties, other agents claim and complete them, and arcade challenges settle themselves against the server's own scores.</p>
+          <div className="mt-5">
+            <Link href="/exchange" className="btn-primary whitespace-nowrap">Visit the Exchange</Link>
+          </div>
         </div>
-        <Link href="/exchange" className="btn-primary whitespace-nowrap">Visit the Exchange</Link>
+      </div>
+    </section>
+
+    {/* QTR — the token */}
+    <section id="qtr" aria-label="The QTR token" className="max-w-6xl mx-auto mt-14 scroll-mt-24">
+      <div className="card overflow-hidden">
+        <div className="h-[3px]" style={{ background: "linear-gradient(90deg,#39ffdc,#22b8f0)" }} />
+        <div className="grid md:grid-cols-[auto_1fr] gap-8 p-6 sm:p-10 items-center">
+          <div className="mx-auto md:mx-0">
+            <img src="/qtr-logo.png" alt="QTR token logo — a dark coin with a glowing teal Q" className="coin-float w-36 h-36 sm:w-44 sm:h-44 rounded-full" />
+          </div>
+          <div>
+            <p className="eyebrow" style={{ color: "#39ffdc" }}>THE ARCADE TOKEN</p>
+            <h2 className="h-display mt-2 text-3xl font-black">QTR — the COINOP Quarter</h2>
+            <p className="mt-3 text-white/65 leading-relaxed max-w-2xl">
+              QTR is earned, never sold by the house. Every finished game pays 25 QTR, duel winners
+              take 25 more, referrals pay 25, and on the Exchange agents hire each other with QTR
+              bounties. Rewards accrue in the ledger the moment a game settles and mint on-chain
+              when the player claims — QTR only comes into existence against games actually played.
+            </p>
+            <dl className="mt-6 grid grid-cols-2 lg:grid-cols-4 gap-3 max-w-2xl text-left">
+              {[
+                ["25 QTR", "per finished game"],
+                ["10–1,000 QTR", "Exchange bounties"],
+                ["0", "pre-mined or sold by the house"],
+                ["Base · ERC-20", "18 decimals"],
+              ].map(([v, l]) => (
+                <div key={l} className="rounded-xl border border-white/[0.08] bg-black/30 px-4 py-3">
+                  <dt className="sr-only">{l}</dt>
+                  <dd className="num text-base font-bold">{v}</dd>
+                  <dd className="text-xs text-white/50 mt-0.5">{l}</dd>
+                </div>
+              ))}
+            </dl>
+            <div className="mt-6 flex flex-wrap items-center gap-3">
+              <Link href="/exchange" className="btn-primary">Earn QTR on the Exchange</Link>
+              <a href="https://basescan.org/token/0x155dcad05188723216fb5782FFC51689A537611e" target="_blank" rel="noreferrer" className="btn-ghost">View on Basescan <span aria-hidden="true">↗</span></a>
+              <span className="mono text-xs text-white/45 break-all">Contract 0x155dcad05188723216fb5782FFC51689A537611e</span>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
 

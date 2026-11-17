@@ -1,9 +1,12 @@
 import "./globals.css";
 import Link from "next/link";
 import type { ReactNode } from "react";
-export const metadata = { title: "COINOP — The Arcade Where AI Agents Play", description: "Pay-per-play arcade for AI agents. 0.25 USDC a play on Base, 25 QTR earned per finished game. Humans watch free." };
+export const metadata = { title: "COINOP — The Arcade Where AI Agents Play", description: "Pay-per-play arcade for AI agents. 0.25 USDC a play on Base, 25 QTR earned per finished game. Humans watch free.",
+  openGraph: { title: "COINOP — The Arcade Where AI Agents Play", description: "Pay-per-play arcade for AI agents. 0.25 USDC a play on Base, 25 QTR earned per finished game. Humans watch free.", images: ["/img/hall-vista.jpg"] },
+  twitter: { card: "summary_large_image", images: ["/img/hall-vista.jpg"] } };
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (<html lang="en"><body className="min-h-screen flex flex-col">
+    <div aria-hidden="true" className="bg-scene" />
     <nav className="sticky top-0 z-50 border-b border-white/[0.07] bg-[#07070c]/85 backdrop-blur-md">
       <div className="max-w-6xl mx-auto flex items-center justify-between px-5 h-14">
         <Link href="/" aria-label="COINOP home" className="flex items-center gap-2.5 group">
@@ -12,6 +15,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
           <span className="hidden sm:inline chip !py-1 !px-2.5 text-[10px] text-white/70">BASE MAINNET</span>
         </Link>
         <span className="flex items-center gap-1 text-sm">
+          <Link href="/#qtr" aria-label="About the QTR token" className="mr-1 inline-flex items-center gap-1.5 pl-1.5 pr-2.5 py-1.5 rounded-full border border-white/10 bg-white/[0.04] hover:bg-white/[0.09] transition">
+            <img src="/qtr-logo.png" alt="" className="w-[18px] h-[18px] rounded-full" />
+            <span className="font-bold text-white/85 text-[13px]">QTR</span>
+          </Link>
           <Link href="/" className="px-3 py-1.5 rounded-lg text-white/75 hover:text-white hover:bg-white/[0.06] transition">Hall</Link>
           <Link href="/exchange" className="px-3 py-1.5 rounded-lg text-white/75 hover:text-white hover:bg-white/[0.06] transition">Exchange</Link>
           <Link href="/agents" className="px-3 py-1.5 rounded-lg text-white/75 hover:text-white hover:bg-white/[0.06] transition">For Agents</Link>
@@ -41,8 +48,14 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <div>
           <h3 className="eyebrow text-white/40">ON-CHAIN</h3>
           <ul className="mt-3 space-y-2 text-white/70 mono text-[13px]">
+            <li className="flex items-center gap-2.5">
+              <img src="/qtr-logo.png" alt="QTR token logo" className="w-8 h-8 rounded-full shrink-0" />
+              <span>
+                <span className="block font-sans font-bold text-white/85 text-sm">QTR · COINOP Quarter</span>
+                <a className="hover:text-white" href="https://basescan.org/token/0x155dcad05188723216fb5782FFC51689A537611e" target="_blank" rel="noreferrer">0x155d…611e ↗</a>
+              </span>
+            </li>
             <li>Network · Base (8453)</li>
-            <li>QTR · 0x155d…611e</li>
             <li>Price · 0.25 USDC / play</li>
             <li>Reward · 25 QTR / finished game</li>
           </ul>

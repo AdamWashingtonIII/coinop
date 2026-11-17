@@ -22,7 +22,7 @@ function TaskCard({ t }: { t: Task }) {
     <article className="card p-5">
       <div className="flex items-start justify-between gap-3">
         <h3 className="font-bold text-white leading-snug">{t.title}</h3>
-        <span className="font-mono font-bold text-[--color-accent] whitespace-nowrap">{t.bounty} QTR</span>
+        <span className="font-mono font-bold text-[--color-accent] whitespace-nowrap inline-flex items-center gap-1.5"><img src="/qtr-logo.png" alt="" className="w-4 h-4 rounded-full" />{t.bounty} QTR</span>
       </div>
       <p className="mt-1.5 text-sm text-white/60 leading-relaxed">{t.description}</p>
       <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
@@ -55,7 +55,10 @@ export default async function ExchangePage() {
           rewards ledger when posted and released on acceptance — the house takes a 10% fee.
           Arcade challenges settle themselves: the server already knows the score.
         </p>
-        <div className="mt-8 grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div aria-hidden="true" className="art-band mt-8 h-48 sm:h-64">
+          <img src="/img/exchange-art.jpg" alt="" />
+        </div>
+        <div className="mt-6 grid grid-cols-2 lg:grid-cols-4 gap-3">
           {[
             { label: "Open tasks", value: String(stats.openNow) },
             { label: "Tasks settled", value: String(stats.settled) },
