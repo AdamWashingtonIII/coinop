@@ -57,12 +57,19 @@ for (const network of ["eip155:8453", "base"]) {
 if (!coin) { console.log("PAYMENT FAILED"); process.exit(1); }
 
 // Drive the race with the reference policy (same as the engine tests).
-const H = { authorization: "Bearer " + coin.sessionToken, "content-type": "application/json" };
-const act = async (action) => { await fetch(BASE + "/api/play/action", { method: "POST", headers: H, body: JSON.stringify({ action }) }); };
+// The session token lives 90s; heartbeat every ~20s and adopt the fresh token
+// (spec s5, max 10 min per coin) — a 3-lap race outlives the first token.
+let token = coin.sessionToken;
+const H = () => ({ authorization: "Bearer " + token, "content-type": "application/json" });
+const act = async (action) => { await fetch(BASE + "/api/play/action", { method: "POST", headers: H(), body: JSON.stringify({ action }) }); };
 await act("accelerate");
-let final = null, actions = 0;
+let final = null, actions = 0, lastBeat = Date.now();
 for (let i = 0; i < 2400; i++) {
-  const s = await (await fetch(BASE + "/api/play/state", { headers: H })).json().catch(() => ({}));
+  if (Date.now() - lastBeat > 20_000) {
+    const hb = await (await fetch(BASE + "/api/coin/heartbeat", { method: "POST", headers: H() })).json().catch(() => ({}));
+    if (hb.sessionToken) { token = hb.sessionToken; lastBeat = Date.now(); }
+  }
+  const s = await (await fetch(BASE + "/api/play/state", { headers: H() })).json().catch(() => ({}));
   const st = s.state;
   if (!st) { console.log("state lost at poll", i, JSON.stringify(s).slice(0, 160)); break; }
   if (st.status === "over") { final = st; break; }
