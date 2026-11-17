@@ -58,7 +58,16 @@ function rgba(hex: string, a: number): string {
 const gpOdo = new Map<string, { ms: number; dist: number }>();
 function gpDistance(seedCommit: string, raceMs: number, speed: number): number {
   let e = gpOdo.get(seedCommit);
-  if (!e || raceMs < e.ms) { e = { ms: raceMs, dist: 0 }; gpOdo.set(seedCommit, e); }
+  if (!e || raceMs < e.ms) {
+    // First sight of this race, or the clock ran backwards (new race /
+    // replay restart). A genuine start sits at distance ~0; a mid-race
+    // first sight (a scrubbed replay, a composed snapshot) gets a
+    // pace-based estimate instead, so place-anchored scenery — the
+    // start/finish gantry — never pops up mid-lap. It re-anchors
+    // exactly at the next true reset, per the odometer's contract.
+    e = { ms: raceMs, dist: raceMs > 2000 ? (speed * raceMs) / 1000 : 0 };
+    gpOdo.set(seedCommit, e);
+  }
   else if (raceMs > e.ms) { e.dist += (speed * (raceMs - e.ms)) / 1000; e.ms = raceMs; }
   return e.dist;
 }
@@ -499,6 +508,12 @@ export function drawGameState(ctx: CanvasRenderingContext2D, state: AnyStateLike
     const yAt = (k: number) => horizon + scAt(k) * CAM_H * (H / 2);
     const hwAt = (k: number) => scAt(k) * ROAD_HALF * (W / 2);
     const ppmAt = (k: number) => scAt(k) * (W / 2); // screen px per world metre at segment k
+    // The start/finish window: the stretch just after a lap crossing IS
+    // the opening of the lap (lapMs is the only clock that knows), so
+    // the grandstand and the city skyline live in its first seconds,
+    // fading as the lap gets going.
+    const lt = Math.min(raceMs, (s.lapMs as number) || 0);
+    const standAlpha = lt >= 3200 ? 0 : lt <= 2300 ? 1 : 1 - (lt - 2300) / 900;
 
     // --- day sky: bright gradient, flat cloud shapes, a hazy skyline and
     // a tree-line ridge, all parallaxing gently against the far bend.
@@ -517,11 +532,38 @@ export function drawGameState(ctx: CanvasRenderingContext2D, state: AnyStateLike
     cloud(W * 0.52 + farDx * 0.16, horizon * 0.16, 3.8);
     cloud(W * 0.83 + farDx * 0.26, horizon * 0.38, 6.0);
     cloud(W * 0.36 + farDx * 0.20, horizon * 0.52, 3.0);
-    ctx.fillStyle = "rgba(146,180,224,.65)"; // hazy city blocks
-    for (let i = 0; i < 30; i++) {
+    // City skyline behind the hills — only on the start/finish
+    // stretch, fading with the grandstand window; pure hills
+    // elsewhere. Two hazy rows (pale far, deeper near), a couple of
+    // landmark towers with spires, a few lit windows. The tree-line
+    // ridges drawn next bury the blocks' feet.
+    if (standAlpha > 0) {
+      ctx.save(); ctx.globalAlpha = standAlpha;
       const bw2 = W / 30;
-      const bh = 5 + ((i * 41) % 12) + (i % 5 === 3 ? 5 : 0);
-      ctx.fillRect(i * bw2 + farDx * 0.45, horizon - bh, bw2 * 0.82, bh + 1);
+      ctx.fillStyle = "rgba(168,198,232,.55)"; // far row, paler
+      for (let i = 0; i < 30; i++) {
+        const bh = 4 + ((i * 41) % 10) + (i % 5 === 3 ? 4 : 0);
+        ctx.fillRect(i * bw2 + farDx * 0.45, horizon - bh, bw2 * 0.8, bh + 1);
+      }
+      ctx.fillStyle = "rgba(112,146,196,.85)"; // near row, deeper blue-grey
+      for (let i = 0; i < 30; i++) {
+        let bh = 6 + ((i * 67) % 13) + (i % 7 === 2 ? 6 : 0);
+        if (i === 6 || i === 21) bh += 9; // landmark towers
+        const bx = i * bw2 + farDx * 0.5, bwid = bw2 * 0.84;
+        ctx.fillRect(bx, horizon - bh, bwid, bh + 1);
+        if (i === 6 || i === 21) ctx.fillRect(bx + bwid * 0.42, horizon - bh - 2.5, bwid * 0.16, 2.5); // spires
+        if (bwid > 5 && bh > 9) { // a few lit windows
+          ctx.fillStyle = "rgba(255,217,160,.85)";
+          const wn = 1 + ((i * 13) % 3);
+          for (let q = 0; q < wn; q++) {
+            const wx = bx + 1 + ((i * 29 + q * 7) % Math.max(2, Math.floor(bwid - 2)));
+            const wy = horizon - bh + 2 + ((i * 17 + q * 5) % Math.max(2, Math.floor(bh - 4)));
+            ctx.fillRect(wx, wy, 1.1, 1.4);
+          }
+          ctx.fillStyle = "rgba(112,146,196,.85)";
+        }
+      }
+      ctx.restore();
     }
     ctx.fillStyle = "rgba(126,160,205,.7)"; // distant stand silhouettes
     for (const fx of [0.13, 0.68]) {
@@ -555,7 +597,18 @@ export function drawGameState(ctx: CanvasRenderingContext2D, state: AnyStateLike
       h = Math.imul(h ^ (h >>> 13), 1274126177);
       return (h ^ (h >>> 16)) >>> 0;
     };
-    const baseSeg = Math.floor(gpDistance(String(s.seedCommit ?? ""), raceMs, (s.speed as number) || 0) / SEG_M);
+    const distNow = gpDistance(String(s.seedCommit ?? ""), raceMs, (s.speed as number) || 0);
+    const baseSeg = Math.floor(distNow / SEG_M);
+    // The start/finish gantry stands a short setback past the line
+    // (lap distance GP_START_M, so the grid forms up just behind it):
+    // visible while it sits inside the draw window ahead, looming as
+    // the car closes on it, gone once passed. Position comes from the
+    // same odometer as the rest of the scenery.
+    const LAP_M = 480 * SEG_M, GP_START_M = 45;
+    const lapDist = ((distNow % LAP_M) + LAP_M) % LAP_M;
+    let gantryAhead = (GP_START_M - lapDist + LAP_M) % LAP_M;
+    if (gantryAhead > DRAW_N * SEG_M || gantryAhead < SEG_M * 1.2) gantryAhead = -1;
+    const gantryK = gantryAhead > 0 ? gantryAhead / SEG_M : -1;
     const BRANDS = [
       { text: "COINOP", bg: "#06231f", fg: "#39ffdc" },
       { text: "QTR", bg: "#39ffdc", fg: "#07332b" },
@@ -563,9 +616,10 @@ export function drawGameState(ctx: CanvasRenderingContext2D, state: AnyStateLike
       { text: "x402", bg: "#0b0f16", fg: "#ffffff" },
       { text: "INSERT COIN", bg: "#170e02", fg: "#ffb02e" },
     ];
-    const drawBillboard = (cx: number, baseY: number, ppm: number, brand: number) => {
+    const drawBillboard = (cx: number, baseY: number, ppm: number, brand: number, big = false) => {
       const b = BRANDS[brand];
-      const bw = 12.5 * ppm * (b.text.length > 5 ? 1.5 : 1), bh = 4.1 * ppm, postH = 2.7 * ppm;
+      const bs = big ? 1.35 : 1;
+      const bw = 12.5 * ppm * bs * (b.text.length > 5 ? 1.5 : 1), bh = 4.1 * ppm * bs, postH = 2.7 * ppm;
       const x0 = cx - bw / 2, yTop = baseY - postH - bh;
       ctx.fillStyle = "#3a3f45"; // posts
       const pw = Math.max(0.7, 0.32 * ppm);
@@ -579,14 +633,30 @@ export function drawGameState(ctx: CanvasRenderingContext2D, state: AnyStateLike
       ctx.strokeRect(x0 + 1, yTop + 1, Math.max(0, bw - 2), Math.max(0, bh - 2));
       ctx.globalAlpha = 1;
       if (bw >= 15) {
+        // The QTR board carries the coin mark — a gold Q coin beside
+        // the word — once the board is big enough to hold it.
+        const coin = brand === 1 && bw >= 26;
+        let tx = cx;
+        if (coin) {
+          const cr = bh * 0.30, ccx = x0 + bh * 0.50, ccy = yTop + bh / 2;
+          ctx.fillStyle = "#ffb02e";
+          ctx.beginPath(); ctx.arc(ccx, ccy, cr, 0, 7); ctx.fill();
+          ctx.strokeStyle = b.fg; ctx.lineWidth = Math.max(0.6, cr * 0.15);
+          ctx.beginPath(); ctx.arc(ccx, ccy, cr * 0.80, 0, 7); ctx.stroke(); ctx.lineWidth = 1;
+          ctx.fillStyle = "#07332b";
+          ctx.font = `bold ${cr * 1.02}px Arial, sans-serif`;
+          ctx.textAlign = "center"; ctx.textBaseline = "middle";
+          ctx.fillText("Q", ccx, ccy + 0.5);
+          tx = cx + bh * 0.44;
+        }
         ctx.fillStyle = b.fg;
         ctx.font = `bold ${Math.max(2.5, Math.min(bh * 0.52, (bw * 0.92) / (b.text.length * 0.66)))}px Arial, sans-serif`;
         ctx.textAlign = "center"; ctx.textBaseline = "middle";
-        ctx.fillText(b.text, cx, yTop + bh / 2 + 0.5);
+        ctx.fillText(b.text, tx, yTop + bh / 2 + 0.5);
         ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
       }
     };
-    const drawTree = (cx: number, baseY: number, ppm: number, v: number) => {
+    const drawTree = (cx: number, baseY: number, ppm: number, v: number, sv = 1) => {
       const one = (ox: number, s: number) => {
         const th = 5.6 * ppm * s;
         ctx.fillStyle = "#6b4a2f";
@@ -598,8 +668,8 @@ export function drawGameState(ctx: CanvasRenderingContext2D, state: AnyStateLike
         blob(-th * 0.20, th * 0.16, th * 0.22, "#4c8a3c");
         blob(th * 0.20, th * 0.18, th * 0.23, "#5da24a");
       };
-      one(0, 1);
-      if (v) one(2.6 * ppm, 0.62);
+      one(0, sv);
+      if (v) one(2.6 * ppm, 0.62 * sv);
     };
     const drawPole = (cx: number, baseY: number, ppm: number, side: number) => {
       const ph2 = 7.2 * ppm;
@@ -609,12 +679,30 @@ export function drawGameState(ctx: CanvasRenderingContext2D, state: AnyStateLike
       ctx.fillStyle = "#ffd9a0";
       ctx.fillRect(cx - side * 1.7 * ppm - 0.3 * ppm, baseY - ph2 - 0.18 * ppm, 0.6 * ppm, 0.36 * ppm);
     };
-    // The start/finish grandstand: the window just after a lap crossing
-    // IS the opening stretch of the lap (lapMs is the only clock that
-    // knows), so for the first seconds of each lap a tiered stand with a
-    // COINOP banner stands on the right, fading as the lap gets going.
-    const lt = Math.min(raceMs, (s.lapMs as number) || 0);
-    const standAlpha = lt >= 3200 ? 0 : lt <= 2300 ? 1 : 1 - (lt - 2300) / 900;
+    // Corner-apex tyre stacks: two piles of three torus-ish tyres at
+    // the inside kerb, in the classic red / white / dark-teal
+    // rotation — sized boldly so they read from mid-distance.
+    const drawTyreStack = (cx: number, baseY: number, ppm: number, v: number, side: number) => {
+      const cols = ["#c9332c", "#e8ecf0", "#123f38"];
+      const pile = (px: number, vv: number) => {
+        const tw = 2.6 * ppm, th = 0.60 * ppm;
+        for (let i = 0; i < 3; i++) {
+          const y = baseY - (i + 1) * th;
+          ctx.fillStyle = cols[(i + vv) % 3];
+          rr(ctx, px - tw / 2, y, tw, th, th * 0.32); ctx.fill();
+          ctx.strokeStyle = "rgba(0,0,0,.4)"; ctx.lineWidth = Math.max(0.5, ppm * 0.08); ctx.stroke(); ctx.lineWidth = 1;
+          ctx.fillStyle = "#0b0c0f";
+          ctx.beginPath(); ctx.ellipse(px, y + th / 2, tw * 0.20, th * 0.24, 0, 0, 7); ctx.fill();
+          ctx.fillStyle = "rgba(255,255,255,.20)";
+          ctx.fillRect(px - tw * 0.36, y + th * 0.14, tw * 0.72, Math.max(0.5, th * 0.13));
+        }
+      };
+      pile(cx, v);
+      pile(cx + side * 3.0 * ppm, v + 1);
+    };
+    // The start/finish grandstand stands on the right inside the
+    // start/finish window (standAlpha, computed with the projection
+    // helpers above), fading as the lap gets going.
     const GS_K = 12;
     const drawGrandstand = (k: number, alpha: number) => {
       const baseY = yAt(k), ppm = ppmAt(k);
@@ -622,36 +710,127 @@ export function drawGameState(ctx: CanvasRenderingContext2D, state: AnyStateLike
       const x0 = cxAt(k) + hwAt(k) * 1.5;
       const topY = baseY - sh;
       ctx.save(); ctx.globalAlpha = alpha;
-      ctx.fillStyle = "#a7b2be"; // seating block
-      ctx.fillRect(x0, topY + sh * 0.14, sw, sh * 0.86);
-      for (let r = 0; r < 4; r++) { // tier bands + crowd speckle
-        const by = topY + sh * 0.16 + r * sh * 0.155;
-        ctx.fillStyle = "rgba(30,40,55,.28)";
-        ctx.fillRect(x0, by + sh * 0.125, sw, Math.max(0.6, sh * 0.03));
-        if (ppm > 0.5) {
-          const n = Math.floor(sw / 1.3);
+      // Timing tower on the road side of the stand: a slim block with
+      // lit window slits and a teal cap.
+      const tw = 6.5 * ppm, th2 = 21 * ppm, tx0 = x0 - tw - 2.4 * ppm;
+      ctx.fillStyle = "#5d6d7d";
+      ctx.fillRect(tx0, baseY - th2, tw, th2);
+      ctx.fillStyle = "#39ffdc";
+      ctx.fillRect(tx0, baseY - th2, tw, 0.9 * ppm);
+      ctx.fillStyle = "#2c3947";
+      ctx.fillRect(tx0, baseY - th2 + 0.9 * ppm, tw, 0.5 * ppm);
+      ctx.fillStyle = "rgba(255,217,160,.92)";
+      for (let q = 0; q < 3; q++) ctx.fillRect(tx0 + tw * 0.22, baseY - th2 + (2.4 + q * 5.6) * ppm, tw * 0.56, 1.5 * ppm);
+      ctx.fillStyle = "rgba(16,22,30,.85)"; // clock face
+      ctx.fillRect(tx0 + tw * 0.16, baseY - 7.6 * ppm, tw * 0.68, tw * 0.68);
+      ctx.fillStyle = "#e8f4ff";
+      ctx.fillRect(tx0 + tw * 0.44, baseY - 7.6 * ppm + tw * 0.10, tw * 0.09, tw * 0.26);
+      ctx.fillRect(tx0 + tw * 0.44, baseY - 7.6 * ppm + tw * 0.32, tw * 0.30, tw * 0.09);
+      // Seating: three stepped tiers with railing lines, dense crowd
+      // speckle, and two stair aisles cutting the rows.
+      const bh2 = 3.1 * ppm, seatTop = topY + sh * 0.15, seatBot = baseY - bh2;
+      const tierH = (seatBot - seatTop) / 3;
+      ctx.fillStyle = "#8d9aa7"; // base block behind the tiers
+      ctx.fillRect(x0, seatTop, sw, seatBot - seatTop);
+      const crowdCols = ["#c94f43", "#e8e4da", "#3f6fb5", "#e0a83c", "#5da24a", "#7a4fd0"];
+      for (let r = 0; r < 3; r++) {
+        const by = seatTop + r * tierH;
+        ctx.fillStyle = r % 2 ? "#a3aeba" : "#98a5b3";
+        ctx.fillRect(x0, by, sw, tierH);
+        ctx.fillStyle = "rgba(240,246,255,.75)"; // railing along the tier front
+        ctx.fillRect(x0, by + tierH - Math.max(0.6, ppm * 0.22), sw, Math.max(0.5, ppm * 0.16));
+        ctx.fillStyle = "rgba(24,32,44,.35)"; // step shadow under the railing
+        ctx.fillRect(x0, by + tierH, sw, Math.max(0.5, ppm * 0.14));
+        if (ppm > 0.42) { // crowd speckle, jittered within the tier
+          const n = Math.floor(sw / 1.05);
           for (let i = 0; i < n; i++) {
             const hh = ((i * 31 + r * 101) * 2654435761) >>> 0;
-            if (hh % 5 === 0) continue;
-            ctx.fillStyle = ["#c94f43", "#e8e4da", "#3f6fb5", "#e0a83c", "#5da24a"][hh % 5];
-            ctx.fillRect(x0 + 1 + (hh % Math.max(2, Math.floor(sw - 2))), by + sh * 0.03, 1.1, 1.1);
+            if (hh % 6 === 0) continue;
+            ctx.fillStyle = crowdCols[hh % 6];
+            ctx.fillRect(x0 + 0.6 + (hh % Math.max(2, Math.floor(sw - 1.2))), by + 0.5 + ((hh >>> 7) % 40) / 40 * Math.max(0.6, tierH - 1.2), 1.05, 1.05);
           }
         }
       }
-      ctx.fillStyle = "#22303e"; // roof slab + teal under-edge
+      for (const fx of [0.34, 0.67]) { // stair aisles: pale steps, no crowd
+        const ax = x0 + sw * fx - ppm * 0.8;
+        ctx.fillStyle = "#c3ccd4";
+        ctx.fillRect(ax, seatTop, ppm * 1.6, seatBot - seatTop);
+        ctx.fillStyle = "rgba(24,32,44,.30)";
+        for (let q = 1; q < 5; q++) ctx.fillRect(ax, seatTop + (seatBot - seatTop) * q / 5, ppm * 1.6, Math.max(0.5, ppm * 0.14));
+      }
+      // Roof: slab on four posts, shadow thrown over the top tier,
+      // teal under-edge — the COINOP lid on the stand.
+      ctx.fillStyle = "rgba(18,26,36,.30)";
+      ctx.fillRect(x0, seatTop - 0.4 * ppm, sw, tierH * 0.92);
+      ctx.fillStyle = "#333f4d";
+      for (let q = 0; q < 4; q++) ctx.fillRect(x0 + (sw - 0.55 * ppm) * q / 3, topY + 1.5 * ppm, 0.55 * ppm, seatTop - topY - 1.1 * ppm);
+      ctx.fillStyle = "#22303e";
       ctx.fillRect(x0 - 1.6 * ppm, topY, sw + 3.2 * ppm, 1.5 * ppm);
       ctx.fillStyle = "#39ffdc";
       ctx.fillRect(x0 - 1.6 * ppm, topY + 1.5 * ppm, sw + 3.2 * ppm, 0.45 * ppm);
-      const bh2 = 2.6 * ppm, by2 = baseY - bh2; // front banner
+      // Front banner across the base — big and legible.
+      const by2 = baseY - bh2;
       ctx.fillStyle = "#06231f"; ctx.fillRect(x0, by2, sw, bh2);
-      if (sw >= 26) {
+      ctx.fillStyle = "#39ffdc"; ctx.fillRect(x0, by2, sw, Math.max(0.5, 0.28 * ppm));
+      if (sw >= 24) {
         ctx.fillStyle = "#39ffdc";
-        ctx.font = `bold ${Math.min(bh2 * 0.58, sw / 6.4)}px Arial, sans-serif`;
+        ctx.font = `bold ${Math.min(bh2 * 0.60, sw / 5.8)}px Arial, sans-serif`;
         ctx.textAlign = "center"; ctx.textBaseline = "middle";
         ctx.fillText("COINOP", x0 + sw / 2, by2 + bh2 / 2 + 0.5);
         ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
       }
       ctx.restore();
+    };
+    // The start/finish gantry: two steel posts at the road edges and a
+    // truss banner across the top reading COINOP GRAND PRIX, with a
+    // chequered skirt. Drawn at its projected distance (fractional
+    // segment gantryK) after the road pass, so the road and nearer
+    // scenery sit correctly around its feet.
+    const drawGantry = () => {
+      if (gantryK < 0) return;
+      const baseY = yAt(gantryK), ppm = ppmAt(gantryK);
+      const cx = cxAt(gantryK), hw = hwAt(gantryK);
+      const postH = 8.6 * ppm, banH = 2.5 * ppm, banTop = baseY - postH;
+      const px0 = cx - hw - 1.5 * ppm, px1 = cx + hw + 1.5 * ppm;
+      const pw = Math.max(0.8, 0.62 * ppm);
+      ctx.fillStyle = "rgba(0,0,0,.30)"; // feet shadows
+      ctx.beginPath(); ctx.ellipse(px0 + pw / 2, baseY, 1.5 * ppm, 0.4 * ppm, 0, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(px1 + pw / 2, baseY, 1.5 * ppm, 0.4 * ppm, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = "#2c3138"; // posts + truss uprights
+      ctx.fillRect(px0, banTop, pw, postH);
+      ctx.fillRect(px1, banTop, pw, postH);
+      ctx.fillStyle = "rgba(255,255,255,.16)";
+      ctx.fillRect(px0, banTop, Math.max(0.4, pw * 0.35), postH);
+      ctx.fillRect(px1, banTop, Math.max(0.4, pw * 0.35), postH);
+      if (ppm > 0.9) { // truss diagonals on the posts
+        ctx.strokeStyle = "rgba(230,238,246,.35)"; ctx.lineWidth = Math.max(0.5, ppm * 0.09);
+        for (const px of [px0, px1]) for (let q = 0; q < 3; q++) {
+          ctx.beginPath();
+          ctx.moveTo(px, baseY - q * postH / 3); ctx.lineTo(px + pw, baseY - (q + 1) * postH / 3);
+          ctx.moveTo(px + pw, baseY - q * postH / 3); ctx.lineTo(px, baseY - (q + 1) * postH / 3);
+          ctx.stroke();
+        }
+        ctx.lineWidth = 1;
+      }
+      // Banner: dark teal board, teal frame, the race name, and a
+      // chequered skirt along its bottom edge.
+      const bx0 = px0 - 0.7 * ppm, bw = (px1 + pw) - bx0 + 0.7 * ppm;
+      ctx.fillStyle = "#06231f";
+      ctx.fillRect(bx0, banTop, bw, banH);
+      ctx.strokeStyle = "#39ffdc"; ctx.lineWidth = Math.max(0.6, ppm * 0.13);
+      ctx.strokeRect(bx0, banTop, bw, banH); ctx.lineWidth = 1;
+      const sq = banH * 0.30;
+      for (let c = 0; c * sq < bw; c++) {
+        ctx.fillStyle = c % 2 ? "#101216" : "#eef1f4";
+        ctx.fillRect(bx0 + c * sq, banTop + banH - sq, Math.min(sq, bx0 + bw - (bx0 + c * sq)), sq);
+      }
+      if (bw >= 34) {
+        ctx.fillStyle = "#39ffdc";
+        ctx.font = `bold ${Math.min(banH * 0.44, (bw * 0.94) / (16 * 0.64))}px Arial, sans-serif`;
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText("COINOP GRAND PRIX", cx + pw / 2, banTop + banH * 0.36);
+        ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+      }
     };
 
     // --- ground + road, far to near. Segment parity alternates the grass
@@ -668,14 +847,32 @@ export function drawGameState(ctx: CanvasRenderingContext2D, state: AnyStateLike
       ctx.fillStyle = k % 2 ? "#4f9440" : "#5aa34a"; // grass: daytime green bands
       ctx.fillRect(0, yF, W, yN - yF + 1);
       const cxN = cxAt(k), cxF = cxAt(k + 1), hwN = hwAt(k), hwF = hwAt(k + 1);
+      const abs = baseSeg + k, cv = cvAt(k);
       ctx.fillStyle = k % 4 < 2 ? "#cf352e" : "#eef1f4"; // BROAD kerbs at the edges
       quad(cxN - hwN * 1.30, cxN - hwN, cxF - hwF, cxF - hwF * 1.30, yN, yF);
       quad(cxN + hwN, cxN + hwN * 1.30, cxF + hwF * 1.30, cxF + hwF, yN, yF);
       ctx.fillStyle = k % 2 ? "#8f959c" : "#9aa0a7"; // asphalt, light grey
       quad(cxN - hwN, cxN + hwN, cxF + hwF, cxF - hwF, yN, yF);
-      ctx.fillStyle = "rgba(40,44,52,.06)"; // faint tyre-wear sheen on the racing line
-      quad(cxN - hwN * 0.62, cxN - hwN * 0.30, cxF - hwF * 0.30, cxF - hwF * 0.62, yN, yF);
-      quad(cxN + hwN * 0.30, cxN + hwN * 0.62, cxF + hwF * 0.62, cxF + hwF * 0.30, yN, yF);
+      // The polished racing line: two tyre-wear bands that drift with
+      // the bend, plus a darker swept arc laid over strong corners.
+      const ws = Math.max(-0.3, Math.min(0.3, cv * 0.22));
+      ctx.fillStyle = "rgba(40,44,52,.10)";
+      quad(cxN + hwN * (-0.62 + ws), cxN + hwN * (-0.30 + ws), cxF + hwF * (-0.30 + ws), cxF + hwF * (-0.62 + ws), yN, yF);
+      quad(cxN + hwN * (0.30 + ws), cxN + hwN * (0.62 + ws), cxF + hwF * (0.62 + ws), cxF + hwF * (0.30 + ws), yN, yF);
+      if (Math.abs(cv) >= 0.55) { // faint dark tyre arcs through the bend
+        ctx.fillStyle = `rgba(24,25,31,${Math.min(0.15, (Math.abs(cv) - 0.4) * 0.16)})`;
+        const a0 = -0.28 + ws * 1.5, a1 = 0.28 + ws * 1.5;
+        quad(cxN + hwN * a0, cxN + hwN * a1, cxF + hwF * a1, cxF + hwF * a0, yN, yF);
+      }
+      if (yN - yF >= 2) { // asphalt grain: a few deterministic speckles
+        for (let j = 0; j < 5; j++) {
+          const hh = shash(abs, j * 7 + 1, k, 99);
+          const v = ((hh >>> 8) % 100) / 100, u = (hh % 100) / 100;
+          const cxv = cxF + (cxN - cxF) * v, hwv = hwF + (hwN - hwF) * v;
+          ctx.fillStyle = hh % 3 === 0 ? "rgba(255,255,255,.05)" : "rgba(28,30,36,.08)";
+          ctx.fillRect(cxv + (u * 2 - 1) * hwv * 0.92, yF + (yN - yF) * v, Math.max(0.6, hwv * 0.022), Math.max(0.6, (yN - yF) * 0.3));
+        }
+      }
       ctx.fillStyle = "rgba(250,252,255,.85)"; // painted edge lines
       quad(cxN - hwN, cxN - hwN * 0.95, cxF - hwF * 0.95, cxF - hwF, yN, yF);
       quad(cxN + hwN * 0.95, cxN + hwN, cxF + hwF, cxF + hwF * 0.95, yN, yF);
@@ -683,33 +880,55 @@ export function drawGameState(ctx: CanvasRenderingContext2D, state: AnyStateLike
         ctx.fillStyle = "rgba(255,255,255,.38)";
         quad(cxN - hwN * 0.022, cxN + hwN * 0.022, cxF + hwF * 0.022, cxF - hwF * 0.022, yN, yF);
       }
+      if (gantryK > 0 && Math.abs(k - gantryK) < 0.55 && yN - yF >= 1.2) {
+        // the chequered start line painted across the asphalt
+        for (let r = 0; r < 2; r++) for (let c = 0; c < 12; c++) {
+          const fA = r / 2, fB = (r + 1) / 2, uA = c / 12, uB = (c + 1) / 12;
+          const yA = yF + (yN - yF) * fA, yB = yF + (yN - yF) * fB;
+          const cxA = cxF + (cxN - cxF) * fA, hwA = hwF + (hwN - hwF) * fA;
+          const cxB = cxF + (cxN - cxF) * fB, hwB = hwF + (hwN - hwF) * fB;
+          ctx.fillStyle = (r + c) % 2 ? "#14151a" : "#eef1f4";
+          quad(cxB + hwB * (uA * 2 - 1), cxB + hwB * (uB * 2 - 1), cxA + hwA * (uB * 2 - 1), cxA + hwA * (uA * 2 - 1), yB, yA);
+        }
+      }
       // scenery anchored to this segment, painted with its band so
       // nearer segments overpaint farther scenery bases
       if (k === GS_K && standAlpha > 0) drawGrandstand(k, standAlpha);
       const ppm = ppmAt(k);
       if (ppm >= 0.34 && k >= 2) {
-        const abs = baseSeg + k;
-        const h = shash(abs, abs * 31 + 7, Math.round(cvAt(k) * 24), Math.round((dxv(k + 1) - dxv(k)) * 4));
+        const h = shash(abs, abs * 31 + 7, Math.round(cv * 24), Math.round((dxv(k + 1) - dxv(k)) * 4));
+        const nearStand = standAlpha > 0 && k >= 8 && k <= 20;
         if (h % 5 === 2) {
           const side = (h >>> 6) % 2 === 0 ? -1 : 1;
-          if (!(standAlpha > 0 && side > 0 && k >= 8 && k <= 20)) {
+          if (!(nearStand && side > 0)) {
             const tt = (h >>> 4) % 10;
             const bx = cxN + side * hwN * (tt < 5 ? 2.05 : tt < 8 ? 1.85 : 1.5);
             if (tt < 5) drawBillboard(bx, yN, ppm, (h >>> 8) % 5);
-            else if (tt < 8) drawTree(bx, yN, ppm, (h >>> 8) % 2);
+            else if (tt < 8) drawTree(bx, yN, ppm, (h >>> 8) % 2, 0.85 + ((h >>> 10) % 3) * 0.22);
             else drawPole(bx, yN, ppm, side);
           }
+        } else if (h % 11 === 5) { // a rarer, larger board standing closer
+          const side = (h >>> 6) % 2 === 0 ? -1 : 1;
+          if (!(nearStand && side > 0)) drawBillboard(cxN + side * hwN * 1.72, yN, ppm, (h >>> 8) % 5, true);
+        }
+        // tyre stacks guard the inside of strong corners
+        if (Math.abs(cv) >= 0.6 && shash(abs, 777, k, 3) % 3 === 0) {
+          const side = cv > 0 ? 1 : -1;
+          if (!(nearStand && side > 0)) drawTyreStack(cxN + side * hwN * 1.52, yN, ppm, (h >>> 5) % 3, side);
         }
       }
     }
+    drawGantry();
 
     // --- cars: sprite-style rear-view open-wheelers sitting on groundY,
     // total width w (the wing is the widest part). Every car — hero and
     // rivals alike — is BUILT FROM PARTS in the reference's layers:
     // full-width rear wing with endplates, a name across the wing, pylons,
     // very wide rear tyres with tread and sidewall detail standing clear
-    // of a much narrower tapered body, suspension arms, an exposed rear
-    // machinery panel with grille slats and twin exhausts, airbox +
+    // of a much narrower tapered body, full suspension arms and
+    // uprights, an exposed rear machinery panel with a four-tip
+    // exhaust cluster and diffuser strakes, sidepod shoulders with a
+    // livery sweep, a spined engine cover, a tapered airbox, cockpit +
     // helmet, mirror stalks, and a bold livery centre stripe. Each part
     // takes a different rung of the shade() ladder with a crisp dark
     // outline, so the silhouette reads as a detailed car at any distance;
@@ -745,20 +964,31 @@ export function drawGameState(ctx: CanvasRenderingContext2D, state: AnyStateLike
           ctx.strokeStyle = "#3d3d46"; ctx.lineWidth = Math.max(1, w * 0.013);
           rr(ctx, tx + w * 0.038, Y(0.56) + h * 0.085, w * 0.114, h * 0.39, Math.min(2, w * 0.02)); ctx.stroke(); ctx.lineWidth = 1;
         }
+        if (hero && w >= 40) { // teal tyre ring on the hero, tyre-supplier style
+          ctx.strokeStyle = "rgba(57,255,220,.45)"; ctx.lineWidth = Math.max(0.8, w * 0.010);
+          rr(ctx, tx + w * 0.020, Y(0.56) + h * 0.045, w * 0.150, h * 0.47, Math.min(2.5, w * 0.025)); ctx.stroke(); ctx.lineWidth = 1;
+        }
         ctx.fillStyle = "rgba(255,255,255,.10)"; // top sheen
         ctx.fillRect(tx + w * 0.014, Y(0.56) + h * 0.02, w * 0.162, h * 0.055);
       };
       tyre(x - w * 0.47); tyre(x + w * 0.28);
-      // suspension arms reaching from the body out to the tyres
+      // suspension: lower wishbones, an upper arm and a pushrod per
+      // side, running from the body out to upright blocks at the
+      // tyres' inner faces
       if (w >= 30) {
         ctx.strokeStyle = "#0c0d10"; ctx.lineWidth = Math.max(0.8, w * 0.018);
         for (const m of [-1, 1]) {
           ctx.beginPath();
           ctx.moveTo(x + m * w * 0.13, Y(0.36)); ctx.lineTo(x + m * w * 0.33, Y(0.30));
           ctx.moveTo(x + m * w * 0.13, Y(0.22)); ctx.lineTo(x + m * w * 0.33, Y(0.26));
+          ctx.moveTo(x + m * w * 0.10, Y(0.52)); ctx.lineTo(x + m * w * 0.34, Y(0.47));
+          ctx.moveTo(x + m * w * 0.16, Y(0.58)); ctx.lineTo(x + m * w * 0.335, Y(0.44));
           ctx.stroke();
         }
         ctx.lineWidth = 1;
+        ctx.fillStyle = "#101216"; // uprights
+        part(x - w * 0.315, Y(0.44), w * 0.035, h * 0.30, 1);
+        part(x + w * 0.280, Y(0.44), w * 0.035, h * 0.30, 1);
       }
       // body / engine cover: ~45% of car width at the top, tapering up
       // from a wider base between the tyres, shaded light -> base -> dark
@@ -795,30 +1025,113 @@ export function drawGameState(ctx: CanvasRenderingContext2D, state: AnyStateLike
       ctx.globalAlpha = 1;
       ctx.fillStyle = "rgba(0,0,0,.25)"; // shoulder crease across the cover
       ctx.fillRect(x - w * 0.295, Y(0.30), w * 0.59, h * 0.02);
+      ctx.fillStyle = "rgba(255,255,255,.10)"; // cover highlight + lower step
+      ctx.fillRect(x - w * 0.17, Y(0.56), w * 0.34, h * 0.018);
+      ctx.fillStyle = "rgba(0,0,0,.18)";
+      ctx.fillRect(x - w * 0.28, Y(0.20), w * 0.56, h * 0.02);
+      // sidepod shoulders: sculpted blocks low on the flanks carrying
+      // the livery — a bold accent sweep across each shoulder
+      for (const m of [-1, 1]) {
+        ctx.fillStyle = shade(hex, 0.8);
+        ctx.beginPath();
+        ctx.moveTo(x + m * w * 0.13, Y(0.40)); ctx.lineTo(x + m * w * 0.29, Y(0.40));
+        ctx.lineTo(x + m * w * 0.30, Y(0.16)); ctx.lineTo(x + m * w * 0.20, Y(0.16));
+        ctx.closePath(); ctx.fill();
+        ctx.strokeStyle = ol; ctx.lineWidth = lw; ctx.stroke(); ctx.lineWidth = 1;
+        ctx.fillStyle = hero ? "rgba(57,255,220,.8)" : "rgba(255,255,255,.45)";
+        ctx.beginPath();
+        ctx.moveTo(x + m * w * 0.15, Y(0.375)); ctx.lineTo(x + m * w * 0.27, Y(0.375));
+        ctx.lineTo(x + m * w * 0.28, Y(0.335)); ctx.lineTo(x + m * w * 0.165, Y(0.335));
+        ctx.closePath(); ctx.fill();
+      }
+      if (hero && w >= 80) { // number roundels on the engine-cover flanks
+        for (const m of [-1, 1]) {
+          ctx.fillStyle = "#f2f6fa";
+          ctx.beginPath(); ctx.arc(x + m * w * 0.235, Y(0.27), w * 0.042, 0, 7); ctx.fill();
+          ctx.strokeStyle = ol; ctx.lineWidth = lw; ctx.stroke(); ctx.lineWidth = 1;
+          ctx.fillStyle = "#0b2030";
+          ctx.font = `bold ${w * 0.055}px Arial, sans-serif`;
+          ctx.textAlign = "center"; ctx.textBaseline = "middle";
+          ctx.fillText("1", x + m * w * 0.235, Y(0.27) + w * 0.004);
+          ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+        }
+      }
       // exposed rear machinery between the tyres: engine block panel,
-      // grille slats low, twin exhausts — the reference's busy rear end
+      // a four-tip exhaust cluster, diffuser strakes low — the
+      // reference's busy rear end
       ctx.fillStyle = "#0b0c0f";
       ctx.beginPath();
       ctx.moveTo(x - w * 0.20, Y(0.31)); ctx.lineTo(x + w * 0.20, Y(0.31));
       ctx.lineTo(x + w * 0.26, Y(0.03)); ctx.lineTo(x - w * 0.26, Y(0.03));
       ctx.closePath(); ctx.fill();
       ctx.strokeStyle = ol; ctx.lineWidth = lw; ctx.stroke(); ctx.lineWidth = 1;
+      if (w >= 36) { // diffuser strakes fanning across the panel's base
+        ctx.strokeStyle = "rgba(200,210,220,.34)"; ctx.lineWidth = Math.max(0.6, w * 0.006);
+        for (const o of [-0.17, -0.085, 0, 0.085, 0.17]) {
+          ctx.beginPath(); ctx.moveTo(x + w * o, Y(0.105)); ctx.lineTo(x + w * o * 1.18, Y(0.012)); ctx.stroke();
+        }
+        ctx.lineWidth = 1;
+        ctx.fillStyle = "rgba(255,255,255,.07)"; // panel top highlight
+        ctx.fillRect(x - w * 0.185, Y(0.305), w * 0.37, h * 0.016);
+      }
       if (w >= 44) {
-        ctx.fillStyle = "rgba(255,255,255,.10)";
-        for (const o of [-0.15, -0.075, 0.075, 0.15]) ctx.fillRect(x + w * o - w * 0.007, Y(0.115), w * 0.014, h * 0.085);
-        for (const m of [-1, 1]) { // twin exhaust pipes, dark chrome rim + bore
-          ctx.fillStyle = "#8f9aa4";
-          ctx.beginPath(); ctx.arc(x + m * w * 0.042, Y(0.25), w * 0.019, 0, 7); ctx.fill();
-          ctx.fillStyle = "#101216";
-          ctx.beginPath(); ctx.arc(x + m * w * 0.042, Y(0.25), w * 0.010, 0, 7); ctx.fill();
+        // Exhaust cluster: a recessed panel holding FOUR tips in a
+        // row, heat tint above them — dense machinery, and crucially
+        // not two pale rings staring back like eyes.
+        const ew = w * 0.30, eh = h * 0.115, ex = x - ew / 2, ey = Y(0.235);
+        ctx.fillStyle = "#05060a";
+        rr(ctx, ex, ey, ew, eh, Math.min(2, w * 0.012)); ctx.fill();
+        ctx.strokeStyle = "rgba(255,255,255,.14)"; ctx.lineWidth = Math.max(0.5, w * 0.004); ctx.stroke(); ctx.lineWidth = 1;
+        ctx.fillStyle = "rgba(255,120,40,.13)"; // heat tint above the tips
+        ctx.fillRect(ex + ew * 0.08, ey - h * 0.028, ew * 0.84, h * 0.024);
+        for (let q = 0; q < 4; q++) {
+          const tipX = ex + ew * (0.14 + q * 0.24), tipW = ew * 0.15, tipH = eh * 0.62, tipY = ey + eh * 0.19;
+          const tg = ctx.createLinearGradient(0, tipY, 0, tipY + tipH);
+          tg.addColorStop(0, "#aeb8c2"); tg.addColorStop(1, "#3a4048");
+          ctx.fillStyle = tg;
+          rr(ctx, tipX, tipY, tipW, tipH, Math.min(1.5, tipW * 0.3)); ctx.fill();
+          ctx.fillStyle = "#07080a"; // bore
+          ctx.fillRect(tipX + tipW * 0.22, tipY + tipH * 0.52, tipW * 0.56, tipH * 0.34);
         }
       }
-      // airbox above the body centre, dark intake opening at its top
-      ctx.fillStyle = shade(hex, 0.85);
-      part(x - w * 0.075, Y(0.82), w * 0.15, h * 0.30, w * 0.03);
+      // engine spine: a raised ridge running down the cover toward
+      // the airbox, with panel seams and cooling slats on its flanks
+      ctx.fillStyle = shade(hex, 0.92);
+      ctx.beginPath();
+      ctx.moveTo(x - w * 0.055, Y(0.56)); ctx.lineTo(x + w * 0.055, Y(0.56));
+      ctx.lineTo(x + w * 0.085, Y(0.30)); ctx.lineTo(x - w * 0.085, Y(0.30));
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = ol; ctx.lineWidth = lw; ctx.stroke(); ctx.lineWidth = 1;
+      ctx.fillStyle = hero ? "rgba(57,255,220,.85)" : "rgba(255,255,255,.50)"; // livery stripe rides the spine
+      ctx.beginPath();
+      ctx.moveTo(x - w * 0.028, Y(0.555)); ctx.lineTo(x + w * 0.028, Y(0.555));
+      ctx.lineTo(x + w * 0.042, Y(0.315)); ctx.lineTo(x - w * 0.042, Y(0.315));
+      ctx.closePath(); ctx.fill();
+      if (w >= 56) {
+        ctx.strokeStyle = "rgba(0,0,0,.35)"; ctx.lineWidth = Math.max(0.5, w * 0.005);
+        for (const f of [0.40, 0.47]) { // panel seams across the spine
+          ctx.beginPath(); ctx.moveTo(x - w * 0.068, Y(f)); ctx.lineTo(x + w * 0.068, Y(f)); ctx.stroke();
+        }
+        ctx.lineWidth = 1;
+        ctx.fillStyle = "rgba(0,0,0,.4)"; // cooling slats beside the spine
+        for (const m of [-1, 1]) for (let q = 0; q < 3; q++)
+          ctx.fillRect(x + m * w * 0.105 - w * 0.016, Y(0.52) + q * h * 0.045, w * 0.032, h * 0.020);
+      }
+      // airbox: a tapered stack over the spine — wider base rising to
+      // a shaped intake slot with a lit rim
+      const abg = ctx.createLinearGradient(0, Y(0.86), 0, Y(0.52));
+      abg.addColorStop(0, light); abg.addColorStop(1, shade(hex, 0.8));
+      ctx.fillStyle = abg;
+      ctx.beginPath();
+      ctx.moveTo(x - w * 0.058, Y(0.86)); ctx.lineTo(x + w * 0.058, Y(0.86));
+      ctx.lineTo(x + w * 0.098, Y(0.54)); ctx.lineTo(x - w * 0.098, Y(0.54));
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = ol; ctx.lineWidth = lw; ctx.stroke(); ctx.lineWidth = 1;
       if (w >= 20) {
         ctx.fillStyle = "#04050a";
-        rr(ctx, x - w * 0.056, Y(0.82) + h * 0.030, w * 0.112, h * 0.125, w * 0.02); ctx.fill();
+        rr(ctx, x - w * 0.044, Y(0.86) + h * 0.028, w * 0.088, h * 0.115, w * 0.018); ctx.fill();
+        ctx.strokeStyle = "rgba(255,255,255,.28)"; ctx.lineWidth = Math.max(0.5, w * 0.004);
+        rr(ctx, x - w * 0.044, Y(0.86) + h * 0.028, w * 0.088, h * 0.115, w * 0.018); ctx.stroke(); ctx.lineWidth = 1;
       }
       if (hero && w >= 60) { // QTR roundel on the airbox
         ctx.fillStyle = "#39ffdc";
@@ -828,15 +1141,20 @@ export function drawGameState(ctx: CanvasRenderingContext2D, state: AnyStateLike
         ctx.fillText("Q", x, Y(0.63) + w * 0.004);
         ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
       }
-      // driver's helmet, in front of the airbox base
+      // cockpit opening, then the driver's helmet nested in it: a
+      // colour crown with a team stripe over a dark visor band
+      ctx.fillStyle = "#07080c";
+      ctx.beginPath(); ctx.ellipse(x, Y(0.475), w * 0.105, h * 0.115, 0, 0, 7); ctx.fill();
       ctx.fillStyle = "#e8f4ff";
-      ctx.beginPath(); ctx.ellipse(x, Y(0.47), w * 0.078, h * 0.15, 0, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(x, Y(0.46), w * 0.068, h * 0.135, 0, 0, 7); ctx.fill();
       ctx.strokeStyle = ol; ctx.lineWidth = lw; ctx.stroke(); ctx.lineWidth = 1;
       if (w >= 26) {
         ctx.fillStyle = hex; // helmet crown in the car's colour
-        ctx.beginPath(); ctx.ellipse(x, Y(0.47), w * 0.078, h * 0.15, 0, Math.PI, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(x, Y(0.46), w * 0.068, h * 0.135, 0, Math.PI, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = hero ? "#39ffdc" : "#f2f6fa"; // crown stripe
+        ctx.fillRect(x - w * 0.016, Y(0.578), w * 0.032, h * 0.055);
         ctx.fillStyle = "#0a0d14"; // visor band
-        ctx.fillRect(x - w * 0.068, Y(0.50), w * 0.136, h * 0.055);
+        ctx.fillRect(x - w * 0.058, Y(0.485), w * 0.116, h * 0.05);
       }
       // mirror stalks at the body's top corners
       if (w >= 40) {
@@ -866,6 +1184,8 @@ export function drawGameState(ctx: CanvasRenderingContext2D, state: AnyStateLike
       part(x - w * 0.50, Y(0.94), w, h * 0.12, 1.5);
       ctx.fillStyle = hero ? "#39ffdc" : "rgba(255,255,255,.4)"; // accent stripe
       ctx.fillRect(x - w * 0.50, Y(0.845), w, h * 0.022);
+      ctx.fillStyle = shade(hex, 0.5); // gurney flap along the plane's top edge
+      ctx.fillRect(x - w * 0.50, Y(0.952), w, Math.max(0.6, h * 0.02));
       if (w >= 44 && label) { // the car's name across the wing
         const [lr, lg, lb] = hexRgb(hex);
         ctx.fillStyle = (0.299 * lr + 0.587 * lg + 0.114 * lb) > 140 ? "#12151c" : "#f4f8ff";
@@ -874,10 +1194,10 @@ export function drawGameState(ctx: CanvasRenderingContext2D, state: AnyStateLike
         ctx.fillText(label, x, Y(0.88) + 0.5);
         ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
       }
-      if (hero) { // small centre brake light — the one red thing on the car
+      if (hero) { // slim centre rain light — the one red thing on the car
         ctx.fillStyle = throttle < 0 ? "#ff2d20" : "rgba(255,45,32,.35)";
-        if (throttle < 0) glowDot(ctx, x, Y(0.30), w * 0.07, "#ff2d20");
-        ctx.fillRect(x - w * 0.030, Y(0.335), w * 0.060, h * 0.070);
+        if (throttle < 0) glowDot(ctx, x, Y(0.30), w * 0.05, "#ff2d20");
+        ctx.fillRect(x - w * 0.017, Y(0.335), w * 0.034, h * 0.070);
       }
     };
     const vis = rivals.filter((r) => r.relS > 1 && r.relS < DRAW_N * SEG_M).sort((a, b) => b.relS - a.relS);
