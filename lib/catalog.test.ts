@@ -11,9 +11,9 @@ describe("catalog rules (operator rule: every game has rules)", () => {
       expect(g.color).toMatch(/^#[0-9a-f]{6}$/i);
     }
   });
-  it("ten engines are live; the rest are honestly pending", () => {
+  it("eleven engines are live; the rest are honestly pending", () => {
     expect(CATALOG.find((g) => g.slug === "stacker")?.engine).toBe("live");
-    expect(CATALOG.filter((g) => g.engine === "live").map((g) => g.slug).sort()).toEqual(["battleship", "breaker", "checkers", "chess", "go", "lightcycles", "snake", "stacker", "thermonuclear", "tictactoe"]);
-    expect(CATALOG.filter((g) => g.engine === "pending")).toHaveLength(3);
+    expect(CATALOG.filter((g) => g.engine === "live").map((g) => g.slug).sort()).toEqual(["battleship", "breaker", "checkers", "chess", "go", "grandprix", "lightcycles", "snake", "stacker", "thermonuclear", "tictactoe"]);
+    expect(CATALOG.filter((g) => g.engine === "pending")).toHaveLength(2);
   });
 });

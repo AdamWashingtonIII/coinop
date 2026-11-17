@@ -10,10 +10,11 @@ import { BattleshipGame, BATTLESHIP_MANIFEST, type BattleshipState } from "./bat
 import { ChessGame, CHESS_MANIFEST, type ChessState } from "./chess";
 import { CheckersGame, CHECKERS_MANIFEST, type CheckersState } from "./checkers";
 import { GoGame, GO_MANIFEST, type GoState } from "./go";
+import { GrandPrixGame, GRANDPRIX_MANIFEST, type GrandPrixState } from "./grandprix";
 // One contract for every cabinet engine (ADR 0006 rules are the spec each engine
 // implements): server owns state + score; agents send actions; engines record
 // snapshots + an action log so every finished run can be replayed.
-export type AnyState = StackerState | SnakeState | BreakerState | ThermonuclearState | TicTacToeState | LightCyclesState | BattleshipState | ChessState | CheckersState | GoState;
+export type AnyState = StackerState | SnakeState | BreakerState | ThermonuclearState | TicTacToeState | LightCyclesState | BattleshipState | ChessState | CheckersState | GoState | GrandPrixState;
 export interface Engine {
   readonly slug: string;
   state(): AnyState;
@@ -32,12 +33,13 @@ export function rulesetHash(slug: string): string {
   const g = gameBySlug(slug);
   return createHash("sha256").update(JSON.stringify(g?.rules ?? {})).digest("hex");
 }
-type AnyManifest = typeof STACKER_MANIFEST | typeof SNAKE_MANIFEST | typeof BREAKER_MANIFEST | typeof THERMONUCLEAR_MANIFEST | typeof TICTACTOE_MANIFEST | typeof LIGHTCYCLES_MANIFEST | typeof BATTLESHIP_MANIFEST | typeof CHESS_MANIFEST | typeof CHECKERS_MANIFEST | typeof GO_MANIFEST;
+type AnyManifest = typeof STACKER_MANIFEST | typeof SNAKE_MANIFEST | typeof BREAKER_MANIFEST | typeof THERMONUCLEAR_MANIFEST | typeof TICTACTOE_MANIFEST | typeof LIGHTCYCLES_MANIFEST | typeof BATTLESHIP_MANIFEST | typeof CHESS_MANIFEST | typeof CHECKERS_MANIFEST | typeof GO_MANIFEST | typeof GRANDPRIX_MANIFEST;
 export const MANIFESTS: Record<string, AnyManifest> = {
   stacker: STACKER_MANIFEST, snake: SNAKE_MANIFEST, breaker: BREAKER_MANIFEST,
   thermonuclear: THERMONUCLEAR_MANIFEST, tictactoe: TICTACTOE_MANIFEST,
   lightcycles: LIGHTCYCLES_MANIFEST, battleship: BATTLESHIP_MANIFEST,
   chess: CHESS_MANIFEST, checkers: CHECKERS_MANIFEST, go: GO_MANIFEST,
+  grandprix: GRANDPRIX_MANIFEST,
 };
 export function createEngine(slug: string, seed?: number): Engine | null {
   switch (slug) {
@@ -52,6 +54,7 @@ export function createEngine(slug: string, seed?: number): Engine | null {
     case "chess": return seed === undefined ? new ChessGame() : new ChessGame(Date.now, seed);
     case "checkers": return seed === undefined ? new CheckersGame() : new CheckersGame(Date.now, seed);
     case "go": return seed === undefined ? new GoGame() : new GoGame(Date.now, seed);
+    case "grandprix": return seed === undefined ? new GrandPrixGame() : new GrandPrixGame(Date.now, seed);
     default: return null;
   }
 }
@@ -70,6 +73,7 @@ export function createEngineWithClock(slug: string, seed: number | undefined, no
     case "chess": return new ChessGame(now, seed);
     case "checkers": return new CheckersGame(now, seed);
     case "go": return new GoGame(now, seed);
+    case "grandprix": return new GrandPrixGame(now, seed);
     default: return null;
   }
 }

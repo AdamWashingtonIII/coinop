@@ -416,6 +416,100 @@ export function drawGameState(ctx: CanvasRenderingContext2D, state: AnyStateLike
       ctx.fillText("OUTCOME: " + String(s.outcome ?? "").toUpperCase() + " · MARGIN " + (s.finalMargin as number), 10, oy + 8 * cell + 48); }
     return;
   }
+  if (s.slug === "grandprix") {
+    const road = s.road as { dx: number; curve: number }[];
+    const rivals = s.rivals as { id: number; relS: number; lat: number; kmh: number; color: string }[];
+    const lat = s.lat as number;
+    const N = Math.max(2, road.length);
+    const horizon = 44, bottom = H - 4;
+    const yAt = (k: number) => bottom - (bottom - horizon) * Math.pow(k / (N - 1), 0.55);
+    const wAt = (k: number) => 10 + 112 * Math.pow(1 - k / (N - 1), 1.3);
+    const cxAt = (k: number) => W / 2 + (road[Math.min(N - 1, Math.max(0, Math.round(k)))]?.dx ?? 0) * (wAt(k) / 9);
+    const fmtMs = (ms: number) => { const m = Math.floor(ms / 60000), sec = Math.floor((ms % 60000) / 1000), th = Math.floor(ms % 1000);
+      return m + ":" + String(sec).padStart(2, "0") + "." + String(th).padStart(3, "0"); };
+    // runoff: dark racing green under the sky
+    ctx.fillStyle = vgrad(ctx, horizon, H, [[0, "#0a1f16"], [1, "#04120b"]]);
+    ctx.fillRect(0, horizon, W, H - horizon);
+    // asphalt
+    ctx.beginPath();
+    for (let k = 0; k < N; k++) { const x = cxAt(k) - wAt(k), y = yAt(k); if (k === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); }
+    for (let k = N - 1; k >= 0; k--) ctx.lineTo(cxAt(k) + wAt(k), yAt(k));
+    ctx.closePath();
+    ctx.fillStyle = vgrad(ctx, horizon, H, [[0, "#232733"], [1, "#12141d"]]);
+    ctx.fill();
+    // rumble strips: alternating red/white edge quads
+    for (let k = 0; k < N - 1; k++) {
+      const c = k % 4 < 2 ? "#d43a3a" : "#e8ecf4";
+      ctx.fillStyle = c;
+      for (const side of [-1, 1]) {
+        const sw0 = wAt(k) * 0.10, sw1 = wAt(k + 1) * 0.10;
+        ctx.beginPath();
+        ctx.moveTo(cxAt(k) + side * wAt(k), yAt(k));
+        ctx.lineTo(cxAt(k) + side * (wAt(k) - sw0), yAt(k));
+        ctx.lineTo(cxAt(k + 1) + side * (wAt(k + 1) - sw1), yAt(k + 1));
+        ctx.lineTo(cxAt(k + 1) + side * wAt(k + 1), yAt(k + 1));
+        ctx.closePath(); ctx.fill();
+      }
+      if (k % 4 === 0) { // centre dashes
+        ctx.fillStyle = "rgba(230,238,250,.5)";
+        const dw = Math.max(1, wAt(k) * 0.03);
+        ctx.fillRect(cxAt(k) - dw / 2, yAt(k + 1), dw, Math.max(1, yAt(k) - yAt(k + 1)));
+      }
+    }
+    const drawCar = (x: number, y: number, w: number, hex: string, hero: boolean) => {
+      const h = w * 0.95;
+      if (hero) glowDot(ctx, x, y + h * 0.1, w * 0.42, hex);
+      ctx.fillStyle = "#0a0a0e"; // wheels
+      for (const [wx, wy] of [[-0.52, -0.18], [0.52, -0.18], [-0.54, 0.34], [0.54, 0.34]])
+        rr(ctx, x + wx * w - w * 0.10, y + wy * h - h * 0.10, w * 0.20, h * 0.20, 2), ctx.fill();
+      ctx.fillStyle = vgrad(ctx, y - h / 2, y + h / 2, [[0, rgba(hex, 0.65)], [0.5, hex], [1, rgba(hex, 0.8)]]);
+      ctx.beginPath(); // tapered body, nose up-screen
+      ctx.moveTo(x, y - h * 0.52);
+      ctx.lineTo(x + w * 0.13, y - h * 0.1); ctx.lineTo(x + w * 0.34, y + h * 0.12);
+      ctx.lineTo(x + w * 0.36, y + h * 0.42); ctx.lineTo(x - w * 0.36, y + h * 0.42);
+      ctx.lineTo(x - w * 0.34, y + h * 0.12); ctx.lineTo(x - w * 0.13, y - h * 0.1);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = "#101018"; // cockpit + halo
+      ctx.beginPath(); ctx.ellipse(x, y + h * 0.05, w * 0.13, h * 0.17, 0, 0, 7); ctx.fill();
+      ctx.strokeStyle = "rgba(240,246,255,.85)"; ctx.lineWidth = Math.max(1, w * 0.045);
+      ctx.beginPath(); ctx.arc(x, y + h * 0.02, w * 0.17, Math.PI * 1.08, Math.PI * 1.92); ctx.stroke(); ctx.lineWidth = 1;
+      ctx.fillStyle = rgba(hex, 0.95); // rear wing
+      rr(ctx, x - w * 0.46, y + h * 0.40, w * 0.92, h * 0.11, 2); ctx.fill();
+    };
+    // rivals far-to-near, then the player
+    const sorted = [...rivals].filter((r) => r.relS >= 0 && r.relS < (N - 1) * 10).sort((a, b) => b.relS - a.relS);
+    for (const r of sorted) {
+      const k = r.relS / 10;
+      drawCar(cxAt(k) + r.lat * wAt(k), yAt(k), Math.max(3, wAt(k) * 0.36), r.color, false);
+    }
+    const pk = 2.2, px = cxAt(pk) + lat * wAt(pk) * 0.94, py = yAt(pk);
+    ctx.save();
+    ctx.translate(px, py); ctx.rotate(((s.steer as number) || 0) * 0.05); ctx.translate(-px, -py);
+    drawCar(px, py, wAt(pk) * 0.40, color, true);
+    ctx.restore();
+    // HUD
+    hud(ctx, `LAP ${s.lap as number}/${s.laps as number} · P${s.position as number}`, 10, 18, "#e8f4ff", 12);
+    hud(ctx, `${s.kmh as number} KM/H`, W - 92, 18, color, 12);
+    const last = s.lastLapMs as number | null, best = s.bestLapMs as number | null;
+    hud(ctx, last ? `LAST ${fmtMs(last)}` : "LAST —", 10, 34, "#9fb4d8", 10);
+    hud(ctx, best ? `BEST ${fmtMs(best)}` : "BEST —", 118, 34, "#9fb4d8", 10);
+    hud(ctx, "SCORE " + s.score, W - 92, 34, "#e8f4ff", 10);
+    if ((s.crashes as number) > 0) hud(ctx, `CRASHES ${s.crashes as number}`, W - 92, 48, "#ff9f43", 10);
+    if (s.offTrack && s.status === "playing") {
+      ctx.font = "bold 13px monospace"; ctx.fillStyle = (t % 800 < 480) ? "#ffb02e" : "rgba(255,176,46,.35)";
+      ctx.fillText("OFF TRACK", W / 2 - 38, 62);
+    }
+    if (s.status === "over") {
+      ctx.fillStyle = "rgba(3,4,10,.72)"; ctx.fillRect(0, H / 2 - 34, W, 68);
+      ctx.font = "bold 17px monospace"; ctx.fillStyle = s.finished ? "#39ffdc" : "#ffb02e";
+      const msg = s.finished ? `FINISH — P${s.finalPosition as number}` : "TIME EXPIRED";
+      ctx.fillText(msg, W / 2 - ctx.measureText(msg).width / 2, H / 2 - 4);
+      ctx.font = "bold 12px monospace"; ctx.fillStyle = "#e8f4ff";
+      const sub = "SCORE " + s.score + (best ? " · BEST LAP " + fmtMs(best) : "");
+      ctx.fillText(sub, W / 2 - ctx.measureText(sub).width / 2, H / 2 + 18);
+    }
+    return;
+  }
   ctx.fillStyle = "#fff"; ctx.font = "bold 12px monospace";
   ctx.fillText("NO RENDERER FOR " + s.slug.toUpperCase(), 8, 16);
 }

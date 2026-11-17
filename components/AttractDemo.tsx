@@ -10,6 +10,7 @@ import { BattleshipGame } from "@/lib/games/battleship";
 import { ChessGame } from "@/lib/games/chess";
 import { CheckersGame } from "@/lib/games/checkers";
 import { GoGame } from "@/lib/games/go";
+import { GrandPrixGame } from "@/lib/games/grandprix";
 import { drawGameState } from "./render";
 // Attract mode (ADR 0006): when no agent is playing, the cabinet screen runs a demo.
 // Stacker, Snake and Breaker demos are the REAL engines driven by simple bots on a
@@ -89,11 +90,6 @@ export default function AttractDemo({ slug, color, live }: { slug: string; color
       const sx = 160 + Math.sin(t / 11) * 90; ctx!.fillStyle = "#39ffdc";
       ctx!.beginPath(); ctx!.moveTo(sx, 258); ctx!.lineTo(sx - 10, 276); ctx!.lineTo(sx + 10, 276); ctx!.closePath(); ctx!.fill();
       if (t % 14 < 7) { ctx!.fillRect(sx - 1, 200 - (t % 14) * 8, 2, 12); } label("ATTRACT DEMO — ENGINE IN BUILD"); }
-    function simRunner() { const t = S.t[0]++; ctx!.fillStyle = "#000"; ctx!.fillRect(0, 0, CW, CH);
-      ctx!.strokeStyle = "rgba(255,255,255,.25)"; for (const lx of [96, 192]) { ctx!.beginPath(); ctx!.moveTo(160 + (lx - 160) * 0.2, 40); ctx!.lineTo(lx + (lx - 160) * 0.4, CH); ctx!.stroke(); }
-      for (let i = 0; i < 4; i++) { const y = ((t * 6 + i * 90) % 280) + 30; const lane = (i + ((t / 30) | 0)) % 3;
-        ctx!.fillStyle = "#ff2e63"; ctx!.fillRect(70 + lane * 80, y, 44, 14); }
-      const px = 70 + ((t / 22) % 3 | 0) * 80 + 12; ctx!.fillStyle = color; ctx!.fillRect(px, 248, 20, 20); label("ATTRACT DEMO — ENGINE IN BUILD"); }
     function simWhack() { const t = S.t[0]++; ctx!.fillStyle = "#000"; ctx!.fillRect(0, 0, CW, CH);
       for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) { const x = 45 + c * 85, y = 55 + r * 80;
         ctx!.fillStyle = "#23233a"; ctx!.beginPath(); ctx!.ellipse(x + 30, y + 34, 34, 12, 0, 0, 7); ctx!.fill();
@@ -260,12 +256,36 @@ export default function AttractDemo({ slug, color, live }: { slug: string; color
       if (stones > 62 || !goPick()) { try { go.act("pass"); } catch { /* already over */ } }
       drawGameState(ctx!, go.state(), color);
     }
-    const sims: Record<string, () => void> = { asteroids: simAsteroids, runner: simRunner, whack: simWhack };
+    // --- grand prix: real engine on a virtual clock + racing-line bot ---
+    let gnow = 0, gpOverTicks = 0, gpSeed = 97;
+    let gp = new GrandPrixGame(() => gnow, gpSeed);
+    function stepGrandPrix() {
+      gnow += 100;
+      const st = gp.state();
+      if (st.status === "over") { gpOverTicks++;
+        if (gpOverTicks > 14) { gpSeed = (gpSeed * 1103515245 + 12345) % 2147483648; gp = new GrandPrixGame(() => gnow, gpSeed); gpOverTicks = 0; }
+        drawGameState(ctx!, gp.state(), color); return; }
+      let curveAhead = 0;
+      for (let k = 4; k < 18; k++) { const c = st.road[k]?.curve ?? 0; if (Math.abs(c) > Math.abs(curveAhead)) curveAhead = c; }
+      let targetLat = Math.max(-0.72, Math.min(0.72, curveAhead * 2.4));
+      let blocked = false;
+      for (const r of st.rivals) {
+        if (r.relS > 4 && r.relS < 72 && Math.abs(r.lat - st.lat) < 0.6)
+          targetLat = Math.max(-0.82, Math.min(0.82, r.lat + (st.lat >= r.lat ? 0.75 : -0.75)));
+        if (r.relS > 0 && r.relS < 30 && Math.abs(r.lat - st.lat) < 0.62 && r.kmh < st.kmh) blocked = true;
+      }
+      const wantSteer = targetLat > st.lat + 0.07 ? 1 : targetLat < st.lat - 0.07 ? -1 : 0;
+      if (wantSteer !== st.steer) gp.act(wantSteer === 1 ? "right" : wantSteer === -1 ? "left" : "center");
+      const wantThrottle = blocked || (Math.abs(curveAhead) > 0.5 && st.speed > 76) ? -1 : 1;
+      if (wantThrottle !== st.throttle) gp.act(wantThrottle === 1 ? "accelerate" : "brake");
+      drawGameState(ctx!, gp.state(), color); bottomLabel(gp.state().score);
+    }
+    const sims: Record<string, () => void> = { asteroids: simAsteroids, whack: simWhack };
     let last = 0;
     function frame(ts: number) { if (stopped) return;
       const step = slug === "stacker" ? 250 : slug === "thermonuclear" ? 900 : slug === "tictactoe" ? 650
         : slug === "lightcycles" ? 120 : slug === "battleship" ? 700 : slug === "chess" ? 900
-        : slug === "checkers" ? 700 : slug === "go" ? 500 : 90;
+        : slug === "checkers" ? 700 : slug === "go" ? 500 : slug === "grandprix" ? 100 : 90;
       if (ts - last >= step) { last = ts;
         if (slug === "stacker") stepStacker();
         else if (slug === "snake") stepSnake();
@@ -277,6 +297,7 @@ export default function AttractDemo({ slug, color, live }: { slug: string; color
         else if (slug === "chess") stepChess();
         else if (slug === "checkers") stepCheckers();
         else if (slug === "go") stepGo();
+        else if (slug === "grandprix") stepGrandPrix();
         else sims[slug]?.(); }
       raf = requestAnimationFrame(frame); }
     raf = requestAnimationFrame(frame);
