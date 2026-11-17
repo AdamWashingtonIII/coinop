@@ -80,7 +80,14 @@ retina, soft.
 
 - `npx vitest run`: 192 passed, 7 skipped (incl. the 3 new renderer
   smoke tests). `npx tsc --noEmit` clean. `scripts/security-scan.py` PASS.
-- Production: deployed via `scripts/deploy-prod.py`; all 11 cabinet pages
-  return 200 and serve the new bundle; attract demos (the load path for
-  every cabinet) run the new renderer. No paid play was spent — a
-  rendering change needs none.
+- Production: deployed via `scripts/deploy-prod.py`. The first attempt
+  failed Vercel's build typecheck on a cast in the new smoke test
+  (`tsc` had been run before the test file existed locally — the lesson
+  is in the run order, and the fix is commit df1a2c1); the second deploy
+  is READY (dpl_yP8DFK3DDJSuqXi1KnkwXWw4PZUM) and aliased to
+  coinop-one.vercel.app. All 11 cabinet pages return 200 and serve the
+  new markup (960×900 canvas, max-w-5xl column), the production bundle
+  contains the new GP renderer, the spectate API responds, and the
+  standing "Snake 100+" Exchange task is untouched. Attract demos (the
+  load path for every cabinet) run the new renderer. No paid play was
+  spent — a rendering change needs none.
