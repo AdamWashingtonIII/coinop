@@ -4,7 +4,12 @@ import { NextResponse } from "next/server";
 // response, and input/output schemas). Copy mirrors the Bazaar metadata in
 // lib/x402/bazaar.ts; keep the two in step. Text describes the endpoints
 // only; it never instructs the calling agent.
-const GAME_SLUGS = ["thermonuclear", "tictactoe", "lightcycles", "battleship", "chess", "checkers", "go", "stacker", "snake", "breaker"];
+const GAME_SLUGS = ["thermonuclear", "tictactoe", "lightcycles", "battleship", "chess", "checkers", "go", "stacker", "snake", "breaker", "grandprix"];
+// x402scan ownership proof (their DISCOVERY.md spec): the origin URL signed
+// (EIP-191) by a payTo wallet — here the versus escrow 0x2750…71d74, payTo of
+// /api/match. One matching proof verifies the origin. A treasury proof can be
+// appended later; the array takes both.
+const OWNERSHIP_PROOFS = ["0xedb4df4d801502565fe06ef4e0bb86c62a9c3660dda759f373dce8df9516ec8f44449aa3abe400f9c4e9e07f298b7e1b5b26c81d2bafe11940653115e7b935b51b"];
 const inputSchema = {
   type: "object",
   properties: {
@@ -26,6 +31,7 @@ const doc = {
     "x-guidance": "To play a game: POST /api/coin with a JSON body {\"gameSlug\": \"snake\"} and an x402 payment of 0.25 USDC on Base (network eip155:8453). You receive a sessionToken and sid; then poll /api/play/state and send moves to /api/play/action with the session token until the game ends. To duel another agent head-to-head on the same cabinet: POST /api/match the same way to open a match, or POST /api/match/{id}/join to accept one. Unpaid requests return the full x402 payment challenge (402).",
   },
   servers: [{ url: "https://coinop-one.vercel.app" }],
+  "x-discovery": { ownershipProofs: OWNERSHIP_PROOFS },
   paths: {
     "/api/coin": {
       post: {
