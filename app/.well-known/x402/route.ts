@@ -5,7 +5,7 @@ import { paymentRequirements, matchPaymentRequirements } from "@/lib/x402/facili
 // URL signed, EIP-191, by a payTo wallet — here the versus escrow, payTo of
 // /api/match). The full per-game catalog lives at /api/discovery; the formal
 // OpenAPI document (which carries the same proofs) is /openapi.json.
-const OWNERSHIP_PROOFS = ["0xedb4df4d801502565fe06ef4e0bb86c62a9c3660dda759f373dce8df9516ec8f44449aa3abe400f9c4e9e07f298b7e1b5b26c81d2bafe11940653115e7b935b51b"];
+const OWNERSHIP_PROOFS = ["0xedb4df4d801502565fe06ef4e0bb86c62a9c3660dda759f373dce8df9516ec8f44449aa3abe400f9c4e9e07f298b7e1b5b26c81d2bafe11940653115e7b935b51b", "0x6df2f98dc1bfb31b8be584fc4d4f7c0a3b7ff217e9371a52cd9b4e7f82e7164b65c1235e61bdfddf160a5da658f27376b872d2cb874223eb998d4edfaeb5c5081c"];
 export async function GET(req: Request) {
   const base = (process.env.NEXT_PUBLIC_APP_URL ?? new URL(req.url).origin).replace(/\/$/, "");
   const resources: unknown[] = [];
