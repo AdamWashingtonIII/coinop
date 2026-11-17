@@ -46,6 +46,13 @@ function rgba(hex: string, a: number): string {
   const [r, g, b] = hexRgb(hex);
   return `rgba(${r},${g},${b},${a})`;
 }
+// Multiply a hex colour's channels by f (f < 1 darker, f > 1 lighter) —
+// the shading ladder the Grand Prix car routine builds its parts from.
+function shade(hex: string, f: number): string {
+  const [r, g, b] = hexRgb(hex);
+  const c = (v: number) => Math.max(0, Math.min(255, Math.round(v * f)));
+  return `rgb(${c(r)},${c(g)},${c(b)})`;
+}
 function vgrad(ctx: CanvasRenderingContext2D, y0: number, y1: number, stops: [number, string][]): CanvasGradient {
   const g = ctx.createLinearGradient(0, y0, 0, y1);
   for (const [o, c] of stops) g.addColorStop(o, c);
@@ -442,14 +449,19 @@ export function drawGameState(ctx: CanvasRenderingContext2D, state: AnyStateLike
     return;
   }
   if (s.slug === "grandprix") {
-    // Grand Prix — pseudo-3D racer (ADR 0018), F1GP / Monaco GP era viewed
-    // through the COINOP kit. The state was shaped for this: road[k] is the
-    // circuit sample 10k metres ahead (dx = centre-line offset in metres
-    // from the player's own centre line, curve = bend strength) and rivals
-    // carry relS (metres ahead) + lat. A pinhole camera rides at the
-    // player's lateral position; the world is projected and painted
-    // far-to-near: skyline, runoff, rumble strips, asphalt, rivals scaled
-    // by distance, hero car, period HUD. Rendering only — no state touched.
+    // Grand Prix — pseudo-3D racer (ADR 0018, proportions fixed after live
+    // review: the first pass put the near plane below the frame so the
+    // road read as a spike, and painted the hero in the red cabinet accent
+    // so the whole ground washed red). The state was shaped for this:
+    // road[k] is the circuit sample 10k metres ahead (dx = centre-line
+    // offset in metres from the player's own centre line, curve = bend
+    // strength) and rivals carry relS (metres ahead) + lat. A pinhole
+    // camera rides at the player's lateral position; the world is projected
+    // and painted far-to-near: skyline, runoff, rumble strips, asphalt,
+    // part-built cars scaled by distance, hero car, period HUD. The camera
+    // constants place the nearest sample plane right at the frame's bottom
+    // edge, where the 12 m road spans ~90% of the width. Rendering only —
+    // no state touched.
     const road = s.road as { dx: number; curve: number }[];
     const rivals = s.rivals as { id: number; relS: number; lat: number; kmh: number; color: string }[];
     const lat = s.lat as number;
@@ -459,7 +471,7 @@ export function drawGameState(ctx: CanvasRenderingContext2D, state: AnyStateLike
     const speedFrac = Math.max(0, Math.min(1, ((s.speed as number) || 0) / 118));
     const fmtMs = (ms: number) => { const m = Math.floor(ms / 60000), sec = Math.floor((ms % 60000) / 1000), th = Math.floor(ms % 1000);
       return m + ":" + String(sec).padStart(2, "0") + "." + String(th).padStart(3, "0"); };
-    const SEG_M = 10, ROAD_HALF = 6.2, CAM_H = 11, CAM_D = 0.9, Z0 = 5;
+    const SEG_M = 10, ROAD_HALF = 6, CAM_H = 8, CAM_D = 1.0, Z0 = 6.7;
     const DRAW_N = Math.max(4, Math.min(30, road.length - 1));
     const horizon = Math.round(H * 0.40);
     const camX = lat * ROAD_HALF; // camera follows the car; the road moves
@@ -503,81 +515,160 @@ export function drawGameState(ctx: CanvasRenderingContext2D, state: AnyStateLike
     // --- ground + road, far to near. Segment parity alternates the runoff
     // and asphalt shades; the sample window slides as the car advances, so
     // the bands stream toward the viewer — that streaming is the speed read.
-    ctx.fillStyle = "#050f09"; ctx.fillRect(0, horizon, W, H - horizon);
+    // Palette discipline: the ground is deep green-black and the asphalt
+    // blue-grey; red exists only in the thin rumble strips at the edges.
+    ctx.fillStyle = "#06110c"; ctx.fillRect(0, horizon, W, H - horizon);
     const quad = (nl: number, nr: number, fr: number, fl: number, yN: number, yF: number) => {
       ctx.beginPath(); ctx.moveTo(nl, yN); ctx.lineTo(nr, yN); ctx.lineTo(fr, yF); ctx.lineTo(fl, yF); ctx.closePath(); ctx.fill();
     };
     for (let k = DRAW_N - 1; k >= 0; k--) {
       const yN = yAt(k), yF = yAt(k + 1);
-      ctx.fillStyle = k % 2 ? "#07160d" : "#050f09";
+      ctx.fillStyle = k % 2 ? "#091710" : "#06110c"; // runoff: deep green-black bands
       ctx.fillRect(0, yF, W, yN - yF + 1);
       const cxN = cxAt(k), cxF = cxAt(k + 1), hwN = hwAt(k), hwF = hwAt(k + 1);
-      ctx.fillStyle = k % 4 < 2 ? "#c9333b" : "#dfe5ef"; // rumble strips, classic red/white
-      quad(cxN - hwN * 1.18, cxN - hwN, cxF - hwF, cxF - hwF * 1.18, yN, yF);
-      quad(cxN + hwN, cxN + hwN * 1.18, cxF + hwF * 1.18, cxF + hwF, yN, yF);
-      ctx.fillStyle = k % 2 ? "#262b38" : "#20242f"; // asphalt
+      ctx.fillStyle = k % 4 < 2 ? "#c9333b" : "#dfe5ef"; // rumble strips, thin, edges only
+      quad(cxN - hwN * 1.10, cxN - hwN, cxF - hwF, cxF - hwF * 1.10, yN, yF);
+      quad(cxN + hwN, cxN + hwN * 1.10, cxF + hwF * 1.10, cxF + hwF, yN, yF);
+      ctx.fillStyle = k % 2 ? "#2b313a" : "#232830"; // asphalt, blue-grey
       quad(cxN - hwN, cxN + hwN, cxF + hwF, cxF - hwF, yN, yF);
-      ctx.fillStyle = "rgba(232,238,250,.5)"; // painted edge lines
+      ctx.fillStyle = "rgba(238,242,250,.55)"; // painted edge lines
       quad(cxN - hwN, cxN - hwN * 0.94, cxF - hwF * 0.94, cxF - hwF, yN, yF);
       quad(cxN + hwN * 0.94, cxN + hwN, cxF + hwF, cxF + hwF * 0.94, yN, yF);
-      if (k % 6 < 3) { // centre dashes
-        ctx.fillStyle = "rgba(170,240,255,.28)";
+      if (k % 6 < 3) { // centre dashes, subtle
+        ctx.fillStyle = "rgba(200,240,255,.22)";
         quad(cxN - hwN * 0.022, cxN + hwN * 0.022, cxF + hwF * 0.022, cxF - hwF * 0.022, yN, yF);
       }
     }
 
-    // --- cars: rear-view open-wheelers sitting on groundY, body width w.
-    // Far cars collapse to silhouette + wing; near cars get airbox, helmet,
-    // and (hero only) a brake light that fires under braking.
+    // --- cars: rear-view open-wheelers sitting on groundY, total width w
+    // (the wing is the widest part). Every car — hero and rivals alike — is
+    // BUILT FROM PARTS, never one filled shape: full-width rear wing with
+    // endplates and pylons, two fat tyres standing clear of a much narrower
+    // tapered body, airbox + helmet, diffuser shadow underneath. Each part
+    // takes a different rung of the shade() ladder and a thin dark outline,
+    // so the silhouette reads as a car at any distance. Fine detail (tyre
+    // rings, visor, roundel) fades in as the car grows.
     const drawCar = (x: number, groundY: number, w: number, hex: string, hero: boolean) => {
-      const h = w * 0.52;
-      ctx.fillStyle = "rgba(0,0,0,.42)";
-      ctx.beginPath(); ctx.ellipse(x, groundY - h * 0.03, w * 0.54, h * 0.10, 0, 0, 7); ctx.fill();
-      ctx.fillStyle = "#08080c"; // fat rear tyres
-      rr(ctx, x - w * 0.52, groundY - h * 0.54, w * 0.17, h * 0.54, Math.min(3, w * 0.04)); ctx.fill();
-      rr(ctx, x + w * 0.35, groundY - h * 0.54, w * 0.17, h * 0.54, Math.min(3, w * 0.04)); ctx.fill();
-      ctx.fillStyle = "rgba(255,255,255,.13)";
-      ctx.fillRect(x - w * 0.52, groundY - h * 0.54, w * 0.17, h * 0.07);
-      ctx.fillRect(x + w * 0.35, groundY - h * 0.54, w * 0.17, h * 0.07);
-      ctx.fillStyle = "#0a0a10"; // diffuser / floor
-      ctx.fillRect(x - w * 0.34, groundY - h * 0.17, w * 0.68, h * 0.17);
-      ctx.fillStyle = vgrad(ctx, groundY - h * 0.66, groundY, [[0, hex], [1, rgba(hex, 0.55)]]);
-      ctx.beginPath();
-      ctx.moveTo(x - w * 0.20, groundY - h * 0.66);
-      ctx.lineTo(x + w * 0.20, groundY - h * 0.66);
-      ctx.lineTo(x + w * 0.37, groundY - h * 0.10);
-      ctx.lineTo(x - w * 0.37, groundY - h * 0.10);
-      ctx.closePath(); ctx.fill();
-      if (w > 15) {
-        ctx.fillStyle = "#101018"; // airbox intake
-        rr(ctx, x - w * 0.065, groundY - h * 0.92, w * 0.13, h * 0.30, w * 0.03); ctx.fill();
-        ctx.fillStyle = "#e8f4ff"; // helmet
-        ctx.beginPath(); ctx.ellipse(x, groundY - h * 0.60, w * 0.095, h * 0.115, 0, 0, 7); ctx.fill();
-        ctx.fillStyle = rgba(hex, 0.9); // helmet stripe in the car's colour
-        ctx.beginPath(); ctx.ellipse(x, groundY - h * 0.635, w * 0.095, h * 0.05, 0, 0, 7); ctx.fill();
+      const h = w * 0.5;
+      const Y = (f: number) => groundY - h * f; // height fraction -> y
+      const dark = shade(hex, 0.45), darker = shade(hex, 0.28), light = shade(hex, 1.45);
+      const ol = "rgba(0,0,0,0.55)";
+      const lw = Math.max(0.5, Math.min(1.6, w * 0.008));
+      const part = (x0: number, y0: number, w0: number, h0: number, r: number) => {
+        rr(ctx, x0, y0, w0, h0, r); ctx.fill();
+        ctx.strokeStyle = ol; ctx.lineWidth = lw; ctx.stroke(); ctx.lineWidth = 1;
+      };
+      // ground shadow + tyre contact patches
+      ctx.fillStyle = "rgba(0,0,0,.45)";
+      ctx.beginPath(); ctx.ellipse(x, groundY - h * 0.02, w * 0.52, h * 0.09, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = "rgba(0,0,0,.5)";
+      ctx.beginPath(); ctx.ellipse(x - w * 0.325, groundY - h * 0.015, w * 0.085, h * 0.045, 0, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(x + w * 0.325, groundY - h * 0.015, w * 0.085, h * 0.045, 0, 0, 7); ctx.fill();
+      // fat rear tyres at the outer edges of the lower car, clear of the body
+      const tyre = (tx: number) => {
+        ctx.fillStyle = "#0a0a0d";
+        part(tx, Y(0.54), w * 0.15, h * 0.54, Math.min(3, w * 0.03));
+        if (w >= 34) { // sidewall ring
+          ctx.strokeStyle = "#3d3d46"; ctx.lineWidth = Math.max(1, w * 0.013);
+          rr(ctx, tx + w * 0.030, Y(0.54) + h * 0.085, w * 0.09, h * 0.37, Math.min(2, w * 0.02)); ctx.stroke(); ctx.lineWidth = 1;
+        }
+        ctx.fillStyle = "rgba(255,255,255,.10)"; // top sheen
+        ctx.fillRect(tx + w * 0.012, Y(0.54) + h * 0.02, w * 0.126, h * 0.055);
+      };
+      tyre(x - w * 0.40); tyre(x + w * 0.25);
+      // floor / diffuser between the tyres
+      ctx.fillStyle = "#060609";
+      part(x - w * 0.26, Y(0.17), w * 0.52, h * 0.17, 1);
+      if (w >= 50) {
+        ctx.fillStyle = "rgba(255,255,255,.06)";
+        for (const o of [-0.12, 0, 0.12]) ctx.fillRect(x + w * o - w * 0.008, Y(0.155), w * 0.016, h * 0.13);
       }
-      ctx.fillStyle = rgba(hex, 0.72); // lower wing plane
-      rr(ctx, x - w * 0.44, groundY - h * 0.82, w * 0.88, h * 0.085, 1.5); ctx.fill();
-      ctx.fillStyle = hex; // main rear wing
-      rr(ctx, x - w * 0.53, groundY - h * 1.02, w * 1.06, h * 0.13, 2); ctx.fill();
-      ctx.fillStyle = rgba(hex, 0.6); // endplates
-      rr(ctx, x - w * 0.53, groundY - h * 1.02, w * 0.045, h * 0.36, 1.5); ctx.fill();
-      rr(ctx, x + w * 0.485, groundY - h * 1.02, w * 0.045, h * 0.36, 1.5); ctx.fill();
-      if (hero) {
+      // body / engine cover: ~45% of car width at the top, tapering up from
+      // a wider base between the tyres, shaded light -> base -> dark
+      const bg = ctx.createLinearGradient(0, Y(0.62), 0, groundY);
+      bg.addColorStop(0, light); bg.addColorStop(0.45, hex); bg.addColorStop(1, dark);
+      ctx.fillStyle = bg;
+      ctx.beginPath();
+      ctx.moveTo(x - w * 0.17, Y(0.62)); ctx.lineTo(x + w * 0.17, Y(0.62));
+      ctx.lineTo(x + w * 0.30, Y(0.28)); ctx.lineTo(x + w * 0.34, Y(0.08));
+      ctx.lineTo(x - w * 0.34, Y(0.08)); ctx.lineTo(x - w * 0.30, Y(0.28));
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = ol; ctx.lineWidth = lw; ctx.stroke(); ctx.lineWidth = 1;
+      ctx.fillStyle = "rgba(255,255,255,.12)"; // centre highlight along the cover
+      ctx.beginPath();
+      ctx.moveTo(x - w * 0.035, Y(0.60)); ctx.lineTo(x + w * 0.035, Y(0.60));
+      ctx.lineTo(x + w * 0.06, Y(0.10)); ctx.lineTo(x - w * 0.06, Y(0.10));
+      ctx.closePath(); ctx.fill();
+      // dark flanks where the cover curves away, so the body reads as a
+      // sculpted spine rather than a flat pyramid
+      ctx.fillStyle = darker; ctx.globalAlpha = 0.55;
+      for (const m of [-1, 1]) {
+        ctx.beginPath();
+        ctx.moveTo(x + m * w * 0.115, Y(0.62)); ctx.lineTo(x + m * w * 0.185, Y(0.30));
+        ctx.lineTo(x + m * w * 0.24, Y(0.08)); ctx.lineTo(x + m * w * 0.34, Y(0.08));
+        ctx.lineTo(x + m * w * 0.30, Y(0.28)); ctx.lineTo(x + m * w * 0.17, Y(0.62));
+        ctx.closePath(); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = "rgba(0,0,0,.25)"; // shoulder crease across the cover
+      ctx.fillRect(x - w * 0.295, Y(0.30), w * 0.59, h * 0.02);
+      // airbox above the body centre, dark intake opening at its top
+      ctx.fillStyle = shade(hex, 0.85);
+      part(x - w * 0.075, Y(0.82), w * 0.15, h * 0.30, w * 0.03);
+      if (w >= 20) {
+        ctx.fillStyle = "#04050a";
+        rr(ctx, x - w * 0.056, Y(0.82) + h * 0.030, w * 0.112, h * 0.125, w * 0.02); ctx.fill();
+      }
+      // driver's helmet, in front of the airbox base
+      ctx.fillStyle = "#e8f4ff";
+      ctx.beginPath(); ctx.ellipse(x, Y(0.47), w * 0.078, h * 0.15, 0, 0, 7); ctx.fill();
+      ctx.strokeStyle = ol; ctx.lineWidth = lw; ctx.stroke(); ctx.lineWidth = 1;
+      if (w >= 26) {
+        ctx.fillStyle = hex; // helmet crown in the car's colour
+        ctx.beginPath(); ctx.ellipse(x, Y(0.47), w * 0.078, h * 0.15, 0, Math.PI, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "#0a0d14"; // visor band
+        ctx.fillRect(x - w * 0.068, Y(0.50), w * 0.136, h * 0.055);
+      }
+      // wing assembly: two pylons, a lower plane, endplates, and the main
+      // plane on top — drawn last, nearest the viewer from behind
+      ctx.fillStyle = shade(hex, 0.6);
+      ctx.fillRect(x - w * 0.085, Y(0.84), w * 0.05, h * 0.24);
+      ctx.fillRect(x + w * 0.035, Y(0.84), w * 0.05, h * 0.24);
+      ctx.fillStyle = shade(hex, 0.8); // lower wing plane
+      part(x - w * 0.44, Y(0.74), w * 0.88, h * 0.06, 1.2);
+      ctx.fillStyle = shade(hex, 0.65); // endplates
+      part(x - w * 0.50, Y(0.97), w * 0.035, h * 0.33, 1.2);
+      part(x + w * 0.465, Y(0.97), w * 0.035, h * 0.33, 1.2);
+      const wg = ctx.createLinearGradient(0, Y(0.94), 0, Y(0.82)); // main plane
+      wg.addColorStop(0, light); wg.addColorStop(1, hex);
+      ctx.fillStyle = wg;
+      part(x - w * 0.50, Y(0.94), w, h * 0.12, 1.5);
+      ctx.fillStyle = hero ? "#39ffdc" : "rgba(255,255,255,.4)"; // accent stripe
+      ctx.fillRect(x - w * 0.50, Y(0.845), w, h * 0.022);
+      if (w >= 40) { // white number roundel on the wing centre
+        ctx.fillStyle = "#f4f8ff";
+        ctx.beginPath(); ctx.arc(x, Y(0.88), w * 0.038, 0, 7); ctx.fill();
+        ctx.strokeStyle = ol; ctx.lineWidth = lw; ctx.stroke(); ctx.lineWidth = 1;
+      }
+      if (hero) { // small centre brake light — the one red thing on the car
         ctx.fillStyle = throttle < 0 ? "#ff2d20" : "rgba(255,45,32,.35)";
-        if (throttle < 0) glowDot(ctx, x, groundY - h * 0.30, w * 0.09, "#ff2d20");
-        ctx.fillRect(x - w * 0.032, groundY - h * 0.335, w * 0.064, h * 0.075);
+        if (throttle < 0) glowDot(ctx, x, Y(0.30), w * 0.07, "#ff2d20");
+        ctx.fillRect(x - w * 0.030, Y(0.335), w * 0.060, h * 0.070);
       }
     };
     const vis = rivals.filter((r) => r.relS > 1 && r.relS < DRAW_N * SEG_M).sort((a, b) => b.relS - a.relS);
     for (const r of vis) {
       const z = Z0 + r.relS, sc = CAM_D / z;
       const x = W / 2 + sc * (dxAt(r.relS / SEG_M) + r.lat * ROAD_HALF - camX) * (W / 2);
-      drawCar(x, horizon + sc * CAM_H * (H / 2), Math.max(3, sc * 5.6 * (W / 2)), r.color, false);
+      drawCar(x, horizon + sc * CAM_H * (H / 2), Math.max(3, sc * 6.2 * (W / 2)), r.color, false);
     }
     // --- hero car: pinned low-centre like the era's games, leaning on the
-    // wheel and bouncing harder the faster it goes.
-    const heroW = W * 0.40;
+    // wheel and bouncing harder the faster it goes. It wears the COINOP
+    // colours — deep teal with a #39ffdc accent — never the cabinet's red:
+    // a red hero plus its glow is what washed the first pass's ground red.
+    // At 52% of the frame its wing rides above the HUD panels' band and
+    // its inset tyres clear the SCORE block and the speed panel.
+    const heroW = W * 0.52;
     const heroX = W / 2 + steer * W * 0.012;
     const heroY = H * 0.985 + Math.sin(raceMs / 45) * 1.3 * speedFrac;
     if (s.offTrack && s.status === "playing") { // grass flecks off the tyres
@@ -591,9 +682,8 @@ export function drawGameState(ctx: CanvasRenderingContext2D, state: AnyStateLike
       }
     }
     ctx.save();
-    ctx.translate(heroX, heroY); ctx.rotate(steer * 0.05); ctx.translate(-heroX, -heroY);
-    if (speedFrac > 0.02) glowDot(ctx, heroX, heroY - heroW * 0.2, heroW * 0.5, color);
-    drawCar(heroX, heroY, heroW, color, true);
+    ctx.translate(heroX, heroY); ctx.rotate(steer * 0.035); ctx.translate(-heroX, -heroY);
+    drawCar(heroX, heroY, heroW, "#0b4f45", true);
     ctx.restore();
 
     // --- HUD: timing-tower strip up top, lap data low left, pedal lamps
