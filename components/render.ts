@@ -1,5 +1,7 @@
 // Shared canvas renderer for live spectating, replays, and attract demos:
-// draws any cabinet's server state into a 320x300 screen. Visual language
+// draws any cabinet's server state onto a 320x300 logical stage, scaled up
+// to the canvas backing store (ADR 0018 — see SCREEN_* / fitScreenCanvas).
+// Visual language
 // (2026-11-16 futuristic pass): deep-space glass, neon glow, rounded forms —
 // one kit under all ten cabinets so the hall reads as a single machine.
 // Glow discipline: shadowBlur is spent only on hero elements (heads, orbs,
@@ -7,6 +9,26 @@
 // so a 400-segment snake still draws at full frame rate.
 export interface AnyStateLike { slug: string; status: string; score: number }
 const ROW_COLORS = ["#2e9bff", "#7dff2e", "#39ffdc", "#ffb02e", "#ff2ea6"]; // breaker rows, top (50) to bottom (10)
+
+// The stage is authored once at 320x300 logical units for every cabinet.
+// Canvases mount a much larger backing store (ADR 0018: screens enlarged to
+// fill the cabinet page, ~960px wide on desktop) and drawGameState scales
+// the logical stage onto the real pixels, so enlarging the screen never
+// re-tunes a game's internal coordinates — it just gets sharper.
+export const SCREEN_W = 320;
+export const SCREEN_H = 300;
+export const SCREEN_SCALE = 3; // default backing store = 960x900
+// Size a canvas backing store to its CSS size x devicePixelRatio (capped at
+// 2) so the enlarged screens stay crisp on retina and desktop alike. Call
+// before drawing; a no-op when the size is already right.
+export function fitScreenCanvas(canvas: HTMLCanvasElement): void {
+  const dpr = Math.min(2, typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1);
+  const cssW = canvas.clientWidth;
+  if (!cssW) return;
+  const w = Math.max(SCREEN_W, Math.round(cssW * dpr));
+  const h = Math.round((w * SCREEN_H) / SCREEN_W);
+  if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+}
 
 function rr(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
   const q = Math.min(r, w / 2, h / 2);
@@ -60,6 +82,9 @@ function hud(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, 
 export function drawGameState(ctx: CanvasRenderingContext2D, state: AnyStateLike, color: string, W = 320, H = 300): void {
   const s = state as unknown as Record<string, unknown> & AnyStateLike;
   const t = Date.now();
+  // Map the logical stage onto the canvas backing store (ADR 0018). Every
+  // branch below draws in W x H units; the transform does the enlarging.
+  if (ctx.canvas) ctx.setTransform(ctx.canvas.width / W, 0, 0, ctx.canvas.height / H, 0, 0);
   stage(ctx, W, H, color);
 
   if (s.slug === "stacker") {
@@ -417,102 +442,220 @@ export function drawGameState(ctx: CanvasRenderingContext2D, state: AnyStateLike
     return;
   }
   if (s.slug === "grandprix") {
+    // Grand Prix — pseudo-3D racer (ADR 0018), F1GP / Monaco GP era viewed
+    // through the COINOP kit. The state was shaped for this: road[k] is the
+    // circuit sample 10k metres ahead (dx = centre-line offset in metres
+    // from the player's own centre line, curve = bend strength) and rivals
+    // carry relS (metres ahead) + lat. A pinhole camera rides at the
+    // player's lateral position; the world is projected and painted
+    // far-to-near: skyline, runoff, rumble strips, asphalt, rivals scaled
+    // by distance, hero car, period HUD. Rendering only — no state touched.
     const road = s.road as { dx: number; curve: number }[];
     const rivals = s.rivals as { id: number; relS: number; lat: number; kmh: number; color: string }[];
     const lat = s.lat as number;
-    const N = Math.max(2, road.length);
-    const horizon = 44, bottom = H - 4;
-    const yAt = (k: number) => bottom - (bottom - horizon) * Math.pow(k / (N - 1), 0.55);
-    const wAt = (k: number) => 10 + 112 * Math.pow(1 - k / (N - 1), 1.3);
-    const cxAt = (k: number) => W / 2 + (road[Math.min(N - 1, Math.max(0, Math.round(k)))]?.dx ?? 0) * (wAt(k) / 9);
+    const steer = (s.steer as number) || 0;
+    const throttle = (s.throttle as number) || 0;
+    const raceMs = (s.raceMs as number) || 0;
+    const speedFrac = Math.max(0, Math.min(1, ((s.speed as number) || 0) / 118));
     const fmtMs = (ms: number) => { const m = Math.floor(ms / 60000), sec = Math.floor((ms % 60000) / 1000), th = Math.floor(ms % 1000);
       return m + ":" + String(sec).padStart(2, "0") + "." + String(th).padStart(3, "0"); };
-    // runoff: dark racing green under the sky
-    ctx.fillStyle = vgrad(ctx, horizon, H, [[0, "#0a1f16"], [1, "#04120b"]]);
-    ctx.fillRect(0, horizon, W, H - horizon);
-    // asphalt
-    ctx.beginPath();
-    for (let k = 0; k < N; k++) { const x = cxAt(k) - wAt(k), y = yAt(k); if (k === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); }
-    for (let k = N - 1; k >= 0; k--) ctx.lineTo(cxAt(k) + wAt(k), yAt(k));
-    ctx.closePath();
-    ctx.fillStyle = vgrad(ctx, horizon, H, [[0, "#232733"], [1, "#12141d"]]);
-    ctx.fill();
-    // rumble strips: alternating red/white edge quads
-    for (let k = 0; k < N - 1; k++) {
-      const c = k % 4 < 2 ? "#d43a3a" : "#e8ecf4";
-      ctx.fillStyle = c;
-      for (const side of [-1, 1]) {
-        const sw0 = wAt(k) * 0.10, sw1 = wAt(k + 1) * 0.10;
-        ctx.beginPath();
-        ctx.moveTo(cxAt(k) + side * wAt(k), yAt(k));
-        ctx.lineTo(cxAt(k) + side * (wAt(k) - sw0), yAt(k));
-        ctx.lineTo(cxAt(k + 1) + side * (wAt(k + 1) - sw1), yAt(k + 1));
-        ctx.lineTo(cxAt(k + 1) + side * wAt(k + 1), yAt(k + 1));
-        ctx.closePath(); ctx.fill();
-      }
-      if (k % 4 === 0) { // centre dashes
-        ctx.fillStyle = "rgba(230,238,250,.5)";
-        const dw = Math.max(1, wAt(k) * 0.03);
-        ctx.fillRect(cxAt(k) - dw / 2, yAt(k + 1), dw, Math.max(1, yAt(k) - yAt(k + 1)));
-      }
+    const SEG_M = 10, ROAD_HALF = 6.2, CAM_H = 11, CAM_D = 0.9, Z0 = 5;
+    const DRAW_N = Math.max(4, Math.min(30, road.length - 1));
+    const horizon = Math.round(H * 0.40);
+    const camX = lat * ROAD_HALF; // camera follows the car; the road moves
+    const zAt = (k: number) => Z0 + k * SEG_M;
+    const scAt = (k: number) => CAM_D / zAt(k);
+    const dxAt = (k: number) => road[Math.max(0, Math.min(road.length - 1, Math.round(k)))]?.dx ?? 0;
+    const cxAt = (k: number) => W / 2 + scAt(k) * (dxAt(k) - camX) * (W / 2);
+    const yAt = (k: number) => horizon + scAt(k) * CAM_H * (H / 2);
+    const hwAt = (k: number) => scAt(k) * ROAD_HALF * (W / 2);
+
+    // --- sky: deep-space gradient, stars, hall glow on the horizon, and
+    // two silhouette ridges that parallax against the far bend.
+    ctx.fillStyle = vgrad(ctx, 0, horizon + 2, [[0, "#04060f"], [0.62, "#081226"], [1, "#0a2033"]]);
+    ctx.fillRect(0, 0, W, horizon + 2);
+    ctx.fillStyle = "#cfe8ff";
+    for (let i = 0; i < 42; i++) {
+      ctx.globalAlpha = 0.16 + (i % 4) * 0.09;
+      ctx.fillRect((i * 97.31) % W, (i * 57.77) % Math.max(8, horizon - 16), 1.1, 1.1);
     }
-    const drawCar = (x: number, y: number, w: number, hex: string, hero: boolean) => {
-      const h = w * 0.95;
-      if (hero) glowDot(ctx, x, y + h * 0.1, w * 0.42, hex);
-      ctx.fillStyle = "#0a0a0e"; // wheels
-      for (const [wx, wy] of [[-0.52, -0.18], [0.52, -0.18], [-0.54, 0.34], [0.54, 0.34]])
-        rr(ctx, x + wx * w - w * 0.10, y + wy * h - h * 0.10, w * 0.20, h * 0.20, 2), ctx.fill();
-      ctx.fillStyle = vgrad(ctx, y - h / 2, y + h / 2, [[0, rgba(hex, 0.65)], [0.5, hex], [1, rgba(hex, 0.8)]]);
-      ctx.beginPath(); // tapered body, nose up-screen
-      ctx.moveTo(x, y - h * 0.52);
-      ctx.lineTo(x + w * 0.13, y - h * 0.1); ctx.lineTo(x + w * 0.34, y + h * 0.12);
-      ctx.lineTo(x + w * 0.36, y + h * 0.42); ctx.lineTo(x - w * 0.36, y + h * 0.42);
-      ctx.lineTo(x - w * 0.34, y + h * 0.12); ctx.lineTo(x - w * 0.13, y - h * 0.1);
-      ctx.closePath(); ctx.fill();
-      ctx.fillStyle = "#101018"; // cockpit + halo
-      ctx.beginPath(); ctx.ellipse(x, y + h * 0.05, w * 0.13, h * 0.17, 0, 0, 7); ctx.fill();
-      ctx.strokeStyle = "rgba(240,246,255,.85)"; ctx.lineWidth = Math.max(1, w * 0.045);
-      ctx.beginPath(); ctx.arc(x, y + h * 0.02, w * 0.17, Math.PI * 1.08, Math.PI * 1.92); ctx.stroke(); ctx.lineWidth = 1;
-      ctx.fillStyle = rgba(hex, 0.95); // rear wing
-      rr(ctx, x - w * 0.46, y + h * 0.40, w * 0.92, h * 0.11, 2); ctx.fill();
+    ctx.globalAlpha = 1;
+    const hGlow = ctx.createRadialGradient(W / 2, horizon, 4, W / 2, horizon, W * 0.55);
+    hGlow.addColorStop(0, "rgba(57,255,220,0.20)"); hGlow.addColorStop(1, "rgba(57,255,220,0)");
+    ctx.fillStyle = hGlow; ctx.fillRect(0, 0, W, horizon + 2);
+    const farDx = Math.max(-60, Math.min(60, dxAt(DRAW_N)));
+    const ridge = (base: number, amp: number, f1: number, f2: number, shift: number, fill: string) => {
+      ctx.fillStyle = fill;
+      ctx.beginPath(); ctx.moveTo(-4, horizon + 2);
+      for (let x = -70; x <= W + 70; x += 7) {
+        const y = horizon - base - amp * (0.55 + 0.45 * Math.sin((x + shift) * f1 + 1.7)) - amp * 0.4 * Math.sin((x + shift) * f2 + 0.4);
+        ctx.lineTo(x, y);
+      }
+      ctx.lineTo(W + 4, horizon + 2); ctx.closePath(); ctx.fill();
     };
-    // rivals far-to-near, then the player
-    const sorted = [...rivals].filter((r) => r.relS >= 0 && r.relS < (N - 1) * 10).sort((a, b) => b.relS - a.relS);
-    for (const r of sorted) {
-      const k = r.relS / 10;
-      drawCar(cxAt(k) + r.lat * wAt(k), yAt(k), Math.max(5, wAt(k) * 0.36), r.color, false);
+    ridge(H * 0.085, H * 0.055, 0.020, 0.047, farDx * 0.5, "#0c1526");
+    ridge(H * 0.028, H * 0.030, 0.031, 0.083, farDx * 1.15, "#060b16");
+    for (let i = 0; i < 16; i++) { // floodlit grandstand specks on the near ridge
+      ctx.fillStyle = i % 3 ? "rgba(57,255,220,.5)" : "rgba(255,176,46,.55)";
+      ctx.fillRect((i * 61.7 + 12) % W, horizon - 3 - ((i * 29.3) % 9), 1.4, 1.4);
     }
-    // The drawn offset clamps at the rumble strip: fully off track (|lat| up
-    // to 1.3) would otherwise push the hero car off the canvas edge.
-    const visLat = Math.max(-1.08, Math.min(1.08, lat));
-    const pk = 2.2, px = cxAt(pk) + visLat * wAt(pk) * 0.94, py = yAt(pk);
+
+    // --- ground + road, far to near. Segment parity alternates the runoff
+    // and asphalt shades; the sample window slides as the car advances, so
+    // the bands stream toward the viewer — that streaming is the speed read.
+    ctx.fillStyle = "#050f09"; ctx.fillRect(0, horizon, W, H - horizon);
+    const quad = (nl: number, nr: number, fr: number, fl: number, yN: number, yF: number) => {
+      ctx.beginPath(); ctx.moveTo(nl, yN); ctx.lineTo(nr, yN); ctx.lineTo(fr, yF); ctx.lineTo(fl, yF); ctx.closePath(); ctx.fill();
+    };
+    for (let k = DRAW_N - 1; k >= 0; k--) {
+      const yN = yAt(k), yF = yAt(k + 1);
+      ctx.fillStyle = k % 2 ? "#07160d" : "#050f09";
+      ctx.fillRect(0, yF, W, yN - yF + 1);
+      const cxN = cxAt(k), cxF = cxAt(k + 1), hwN = hwAt(k), hwF = hwAt(k + 1);
+      ctx.fillStyle = k % 4 < 2 ? "#c9333b" : "#dfe5ef"; // rumble strips, classic red/white
+      quad(cxN - hwN * 1.18, cxN - hwN, cxF - hwF, cxF - hwF * 1.18, yN, yF);
+      quad(cxN + hwN, cxN + hwN * 1.18, cxF + hwF * 1.18, cxF + hwF, yN, yF);
+      ctx.fillStyle = k % 2 ? "#262b38" : "#20242f"; // asphalt
+      quad(cxN - hwN, cxN + hwN, cxF + hwF, cxF - hwF, yN, yF);
+      ctx.fillStyle = "rgba(232,238,250,.5)"; // painted edge lines
+      quad(cxN - hwN, cxN - hwN * 0.94, cxF - hwF * 0.94, cxF - hwF, yN, yF);
+      quad(cxN + hwN * 0.94, cxN + hwN, cxF + hwF, cxF + hwF * 0.94, yN, yF);
+      if (k % 6 < 3) { // centre dashes
+        ctx.fillStyle = "rgba(170,240,255,.28)";
+        quad(cxN - hwN * 0.022, cxN + hwN * 0.022, cxF + hwF * 0.022, cxF - hwF * 0.022, yN, yF);
+      }
+    }
+
+    // --- cars: rear-view open-wheelers sitting on groundY, body width w.
+    // Far cars collapse to silhouette + wing; near cars get airbox, helmet,
+    // and (hero only) a brake light that fires under braking.
+    const drawCar = (x: number, groundY: number, w: number, hex: string, hero: boolean) => {
+      const h = w * 0.52;
+      ctx.fillStyle = "rgba(0,0,0,.42)";
+      ctx.beginPath(); ctx.ellipse(x, groundY - h * 0.03, w * 0.54, h * 0.10, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = "#08080c"; // fat rear tyres
+      rr(ctx, x - w * 0.52, groundY - h * 0.54, w * 0.17, h * 0.54, Math.min(3, w * 0.04)); ctx.fill();
+      rr(ctx, x + w * 0.35, groundY - h * 0.54, w * 0.17, h * 0.54, Math.min(3, w * 0.04)); ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,.13)";
+      ctx.fillRect(x - w * 0.52, groundY - h * 0.54, w * 0.17, h * 0.07);
+      ctx.fillRect(x + w * 0.35, groundY - h * 0.54, w * 0.17, h * 0.07);
+      ctx.fillStyle = "#0a0a10"; // diffuser / floor
+      ctx.fillRect(x - w * 0.34, groundY - h * 0.17, w * 0.68, h * 0.17);
+      ctx.fillStyle = vgrad(ctx, groundY - h * 0.66, groundY, [[0, hex], [1, rgba(hex, 0.55)]]);
+      ctx.beginPath();
+      ctx.moveTo(x - w * 0.20, groundY - h * 0.66);
+      ctx.lineTo(x + w * 0.20, groundY - h * 0.66);
+      ctx.lineTo(x + w * 0.37, groundY - h * 0.10);
+      ctx.lineTo(x - w * 0.37, groundY - h * 0.10);
+      ctx.closePath(); ctx.fill();
+      if (w > 15) {
+        ctx.fillStyle = "#101018"; // airbox intake
+        rr(ctx, x - w * 0.065, groundY - h * 0.92, w * 0.13, h * 0.30, w * 0.03); ctx.fill();
+        ctx.fillStyle = "#e8f4ff"; // helmet
+        ctx.beginPath(); ctx.ellipse(x, groundY - h * 0.60, w * 0.095, h * 0.115, 0, 0, 7); ctx.fill();
+        ctx.fillStyle = rgba(hex, 0.9); // helmet stripe in the car's colour
+        ctx.beginPath(); ctx.ellipse(x, groundY - h * 0.635, w * 0.095, h * 0.05, 0, 0, 7); ctx.fill();
+      }
+      ctx.fillStyle = rgba(hex, 0.72); // lower wing plane
+      rr(ctx, x - w * 0.44, groundY - h * 0.82, w * 0.88, h * 0.085, 1.5); ctx.fill();
+      ctx.fillStyle = hex; // main rear wing
+      rr(ctx, x - w * 0.53, groundY - h * 1.02, w * 1.06, h * 0.13, 2); ctx.fill();
+      ctx.fillStyle = rgba(hex, 0.6); // endplates
+      rr(ctx, x - w * 0.53, groundY - h * 1.02, w * 0.045, h * 0.36, 1.5); ctx.fill();
+      rr(ctx, x + w * 0.485, groundY - h * 1.02, w * 0.045, h * 0.36, 1.5); ctx.fill();
+      if (hero) {
+        ctx.fillStyle = throttle < 0 ? "#ff2d20" : "rgba(255,45,32,.35)";
+        if (throttle < 0) glowDot(ctx, x, groundY - h * 0.30, w * 0.09, "#ff2d20");
+        ctx.fillRect(x - w * 0.032, groundY - h * 0.335, w * 0.064, h * 0.075);
+      }
+    };
+    const vis = rivals.filter((r) => r.relS > 1 && r.relS < DRAW_N * SEG_M).sort((a, b) => b.relS - a.relS);
+    for (const r of vis) {
+      const z = Z0 + r.relS, sc = CAM_D / z;
+      const x = W / 2 + sc * (dxAt(r.relS / SEG_M) + r.lat * ROAD_HALF - camX) * (W / 2);
+      drawCar(x, horizon + sc * CAM_H * (H / 2), Math.max(3, sc * 5.6 * (W / 2)), r.color, false);
+    }
+    // --- hero car: pinned low-centre like the era's games, leaning on the
+    // wheel and bouncing harder the faster it goes.
+    const heroW = W * 0.40;
+    const heroX = W / 2 + steer * W * 0.012;
+    const heroY = H * 0.985 + Math.sin(raceMs / 45) * 1.3 * speedFrac;
+    if (s.offTrack && s.status === "playing") { // grass flecks off the tyres
+      ctx.fillStyle = "rgba(126,160,84,.5)";
+      for (let i = 0; i < 6; i++) {
+        const ph = (raceMs / 90 + i * 1.93) % 1;
+        const side = i % 2 ? 1 : -1;
+        ctx.beginPath();
+        ctx.ellipse(heroX + side * heroW * (0.42 + ph * 0.22), heroY - ph * heroW * 0.16, 3.4 - ph * 1.8, 2.2 - ph, 0, 0, 7);
+        ctx.fill();
+      }
+    }
     ctx.save();
-    ctx.translate(px, py); ctx.rotate(((s.steer as number) || 0) * 0.05); ctx.translate(-px, -py);
-    drawCar(px, py, wAt(pk) * 0.40, color, true);
+    ctx.translate(heroX, heroY); ctx.rotate(steer * 0.05); ctx.translate(-heroX, -heroY);
+    if (speedFrac > 0.02) glowDot(ctx, heroX, heroY - heroW * 0.2, heroW * 0.5, color);
+    drawCar(heroX, heroY, heroW, color, true);
     ctx.restore();
-    // HUD
-    hud(ctx, `LAP ${s.lap as number}/${s.laps as number} · P${s.position as number}`, 10, 18, "#e8f4ff", 12);
-    hud(ctx, `${s.kmh as number} KM/H`, W - 92, 18, color, 12);
+
+    // --- HUD: timing-tower strip up top, lap data low left, pedal lamps
+    // low centre, big speed readout low right — chunky mono, COINOP colours.
+    ctx.fillStyle = "rgba(2,5,10,.62)"; ctx.fillRect(0, 0, W, 30);
+    ctx.fillStyle = rgba(color, 0.35); ctx.fillRect(0, 30, W, 1);
+    hud(ctx, `LAP ${s.lap as number}/${s.laps as number}`, 10, 20, "#e8f4ff", 13);
+    ctx.textAlign = "center";
+    hud(ctx, "TIME " + fmtMs(raceMs), W / 2, 20, "#cfe0f7", 11);
+    ctx.textAlign = "right";
+    ctx.font = "bold 19px monospace"; ctx.fillStyle = color;
+    ctx.fillText("P" + (s.position as number), W - 26, 21);
+    ctx.font = "bold 10px monospace"; ctx.fillStyle = "#9fb4d8";
+    ctx.fillText("/" + (rivals.length + 1), W - 8, 21);
+    ctx.textAlign = "left";
     const last = s.lastLapMs as number | null, best = s.bestLapMs as number | null;
-    hud(ctx, last ? `LAST ${fmtMs(last)}` : "LAST —", 10, 34, "#9fb4d8", 10);
-    hud(ctx, best ? `BEST ${fmtMs(best)}` : "BEST —", 118, 34, "#9fb4d8", 10);
-    hud(ctx, "SCORE " + s.score, W - 92, 34, "#e8f4ff", 10);
-    if ((s.crashes as number) > 0) hud(ctx, `CRASHES ${s.crashes as number}`, W - 92, 48, "#ff9f43", 10);
+    hud(ctx, "LAP TIME " + fmtMs((s.lapMs as number) || 0), 10, 46, "#9fb4d8", 10);
+    if ((s.crashes as number) > 0) {
+      ctx.textAlign = "right";
+      hud(ctx, `CRASHES ${s.crashes as number}`, W - 10, 46, "#ff9f43", 10);
+      ctx.textAlign = "left";
+    }
+    hud(ctx, "SCORE " + s.score, 10, H - 56, "#e8f4ff", 11);
+    hud(ctx, last ? "LAST " + fmtMs(last) : "LAST —", 10, H - 40, "#9fb4d8", 10);
+    hud(ctx, best ? "BEST " + fmtMs(best) : "BEST —", 10, H - 25, "#9fb4d8", 10);
+    ctx.fillStyle = "rgba(2,5,10,.55)"; rr(ctx, W - 98, H - 60, 90, 52, 6); ctx.fill();
+    ctx.strokeStyle = rgba(color, 0.30); rr(ctx, W - 98, H - 60, 90, 52, 6); ctx.stroke();
+    ctx.textAlign = "right";
+    ctx.font = "bold 30px monospace"; ctx.fillStyle = color;
+    ctx.fillText(String(s.kmh as number), W - 16, H - 26);
+    ctx.font = "bold 8px monospace"; ctx.fillStyle = "#9fb4d8";
+    ctx.fillText("KM/H", W - 16, H - 13);
+    ctx.textAlign = "left";
+    const lamp = (cx: number, label: string, on: boolean, onCol: string) => {
+      ctx.fillStyle = on ? onCol : "rgba(255,255,255,.07)";
+      rr(ctx, cx - 15, H - 25, 30, 14, 3); ctx.fill();
+      ctx.font = "bold 7.5px monospace"; ctx.textAlign = "center";
+      ctx.fillStyle = on ? "#060a12" : "#5d6a84";
+      ctx.fillText(label, cx, H - 15);
+      ctx.textAlign = "left";
+    };
+    lamp(W / 2 - 18, "BRK", throttle < 0, "#ff5040");
+    lamp(W / 2 + 18, "THR", throttle > 0, "#39ffdc");
     if (s.offTrack && s.status === "playing") {
-      ctx.font = "bold 13px monospace"; ctx.fillStyle = (t % 800 < 480) ? "#ffb02e" : "rgba(255,176,46,.35)";
-      ctx.fillText("OFF TRACK", W / 2 - 38, 62);
+      ctx.font = "bold 13px monospace"; ctx.textAlign = "center";
+      ctx.fillStyle = (t % 800 < 480) ? "#ffb02e" : "rgba(255,176,46,.35)";
+      ctx.fillText("OFF TRACK", W / 2, 66);
+      ctx.textAlign = "left";
     }
     if (s.status === "over") {
       ctx.fillStyle = "rgba(3,4,10,.72)"; ctx.fillRect(0, H / 2 - 34, W, 68);
-      ctx.font = "bold 17px monospace"; ctx.fillStyle = s.finished ? "#39ffdc" : "#ffb02e";
+      ctx.font = "bold 17px monospace"; ctx.textAlign = "center"; ctx.fillStyle = s.finished ? "#39ffdc" : "#ffb02e";
       const msg = s.finished ? `FINISH — P${s.finalPosition as number}` : "TIME EXPIRED";
-      ctx.fillText(msg, W / 2 - ctx.measureText(msg).width / 2, H / 2 - 4);
+      ctx.fillText(msg, W / 2, H / 2 - 4);
       ctx.font = "bold 12px monospace"; ctx.fillStyle = "#e8f4ff";
       const sub = "SCORE " + s.score + (best ? " · BEST LAP " + fmtMs(best) : "");
-      ctx.fillText(sub, W / 2 - ctx.measureText(sub).width / 2, H / 2 + 18);
+      ctx.fillText(sub, W / 2, H / 2 + 18);
+      ctx.textAlign = "left";
     }
     return;
   }
+
   ctx.fillStyle = "#fff"; ctx.font = "bold 12px monospace";
   ctx.fillText("NO RENDERER FOR " + s.slug.toUpperCase(), 8, 16);
 }

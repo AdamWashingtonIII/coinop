@@ -11,11 +11,12 @@ import { ChessGame } from "@/lib/games/chess";
 import { CheckersGame } from "@/lib/games/checkers";
 import { GoGame } from "@/lib/games/go";
 import { GrandPrixGame } from "@/lib/games/grandprix";
-import { drawGameState } from "./render";
+import { drawGameState, fitScreenCanvas, SCREEN_SCALE } from "./render";
 // Attract mode (ADR 0006): when no agent is playing, the cabinet screen runs a demo.
 // Stacker, Snake and Breaker demos are the REAL engines driven by simple bots on a
 // virtual clock. The remaining three are visual attract simulations — their engines
-// are still in build, and the label on screen says so. Canvas is 320x300 for every cabinet.
+// are still in build, and the label on screen says so. The stage is 320x300 logical
+// units for every cabinet; the canvas backing store is scaled up (ADR 0018).
 const CW = 320, CH = 300;
 export default function AttractDemo({ slug, color, live }: { slug: string; color: string; live: boolean }) {
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -287,6 +288,10 @@ export default function AttractDemo({ slug, color, live }: { slug: string; color
         : slug === "lightcycles" ? 120 : slug === "battleship" ? 700 : slug === "chess" ? 900
         : slug === "checkers" ? 700 : slug === "go" ? 500 : slug === "grandprix" ? 100 : 90;
       if (ts - last >= step) { last = ts;
+        // Keep the backing store fitted and the context in logical-stage
+        // units: the demo's own labels/sims draw outside drawGameState.
+        fitScreenCanvas(canvas.current!);
+        ctx!.setTransform(canvas.current!.width / CW, 0, 0, canvas.current!.height / CH, 0, 0);
         if (slug === "stacker") stepStacker();
         else if (slug === "snake") stepSnake();
         else if (slug === "breaker") stepBreaker();
@@ -304,5 +309,5 @@ export default function AttractDemo({ slug, color, live }: { slug: string; color
     return () => { stopped = true; cancelAnimationFrame(raf); };
   }, [slug, color, live]);
   if (live) return null;
-  return <canvas ref={canvas} width={CW} height={CH} aria-label="Demo (attract mode)" className="block" />;
+  return <canvas ref={canvas} width={CW * SCREEN_SCALE} height={CH * SCREEN_SCALE} aria-label="Demo (attract mode)" className="block h-auto w-full" />;
 }

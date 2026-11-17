@@ -5,7 +5,7 @@ import AttractDemo from "./AttractDemo";
 import BoardFeed from "./BoardFeed";
 import ReplayViewer from "./ReplayViewer";
 import PrizeLine from "./PrizeLine";
-import { drawGameState, type AnyStateLike } from "./render";
+import { drawGameState, fitScreenCanvas, SCREEN_SCALE, SCREEN_W, SCREEN_H, type AnyStateLike } from "./render";
 import type { GameRules } from "@/lib/catalog";
 // ADR 0003: humans watch. The cabinet renders the server-authoritative state of a
 // live agent session; with no live session it runs the attract-mode demo on the real
@@ -31,7 +31,9 @@ export default function Spectator({ slug, title, color, rules, engine }:
   }, [slug]);
   const current = live.find((l) => l.sid === picked) ?? live[0];
   useEffect(() => { if (!current) return;
-    const ctx = canvas.current?.getContext("2d"); if (!ctx) return;
+    const c = canvas.current; if (!c) return;
+    fitScreenCanvas(c); // backing store tracks CSS size x DPR (ADR 0018)
+    const ctx = c.getContext("2d"); if (!ctx) return;
     drawGameState(ctx, current.state, color);
   }, [current, color]);
   const cs = current?.state as unknown as Record<string, unknown> | undefined;
@@ -48,7 +50,7 @@ export default function Spectator({ slug, title, color, rules, engine }:
       : typeof cs.turn === "number" ? "TURN " + String(cs.turn)
       : "";
   return (<main className="px-5 py-8">
-    <div className="max-w-3xl mx-auto">
+    <div className="max-w-5xl mx-auto">
       <Link href="/" className="text-sm text-white/60 hover:text-white transition">← Back to the hall</Link>
       <div className="mt-4 flex items-start justify-between gap-4 flex-wrap">
         <div>
@@ -64,7 +66,7 @@ export default function Spectator({ slug, title, color, rules, engine }:
       <div className="card mt-6 p-4 md:p-5">
         <div className="grid place-items-center">
           <div className="screen">
-            {current ? <canvas ref={canvas} width={320} height={300} aria-label={"Live render of " + title} className="block" />
+            {current ? <canvas ref={canvas} width={SCREEN_W * SCREEN_SCALE} height={SCREEN_H * SCREEN_SCALE} aria-label={"Live render of " + title} className="block h-auto w-full" />
               : <AttractDemo slug={slug} color={color} live={false} />}
           </div>
         </div>

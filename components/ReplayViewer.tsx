@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { drawGameState, type AnyStateLike } from "./render";
+import { drawGameState, fitScreenCanvas, SCREEN_SCALE, SCREEN_W, SCREEN_H, type AnyStateLike } from "./render";
 // Replay viewer: steps through the server's own snapshots of a finished run —
 // exactly what the engine recorded, nothing re-simulated or invented.
 interface Summary { sid: string; wallet: string; finalScore: number; endedAt: number }
@@ -22,7 +22,9 @@ export default function ReplayViewer({ slug, color }: { slug: string; color: str
     }), 350);
     return () => clearInterval(id);
   }, [playing, detail]);
-  useEffect(() => { const ctx = canvas.current?.getContext("2d"); if (!ctx || !detail) return;
+  useEffect(() => { const c = canvas.current; if (!c || !detail) return;
+    fitScreenCanvas(c); // backing store tracks CSS size x DPR (ADR 0018)
+    const ctx = c.getContext("2d"); if (!ctx) return;
     const s = detail.snapshots[Math.min(idx, detail.snapshots.length - 1)];
     if (s) drawGameState(ctx, s, color);
   }, [detail, idx, color]);
@@ -39,7 +41,7 @@ export default function ReplayViewer({ slug, color }: { slug: string; color: str
         <span className="mono">{r.wallet.slice(0, 6)}…</span> · <span className="num font-bold">{r.finalScore} pts</span></button>))}</div>)}
     {detail && (<div className="mt-4">
       <div className="grid place-items-center"><div className="screen">
-        <canvas ref={canvas} width={320} height={300} aria-label="Replay playback" className="block" />
+        <canvas ref={canvas} width={SCREEN_W * SCREEN_SCALE} height={SCREEN_H * SCREEN_SCALE} aria-label="Replay playback" className="block h-auto w-full" />
       </div></div>
       <div className="mt-3.5 flex items-center gap-2.5 flex-wrap text-sm">
         <button onClick={() => setPlaying((p) => !p)} className={btn}>{playing ? "Pause" : "Play"}</button>
