@@ -7,7 +7,7 @@ import { getDb, schema } from "./db";
 export const TOKENS_PER_PLAY = 25;
 export const TOKEN = { name: "COINOP Quarter", symbol: "QTR", chain: "base", decimals: 18,
   contract: process.env.QTR_CONTRACT_ADDRESS ?? null } as const;
-export type RewardReason = "play_reward" | "reversal" | "match_win" | "match_draw" | "referral" | "task_lock" | "task_pay" | "task_fee" | "task_refund";
+export type RewardReason = "play_reward" | "reversal" | "match_win" | "match_draw" | "referral" | "task_lock" | "task_pay" | "task_fee" | "task_refund" | "play_spend";
 export interface RewardEntry { wallet: string; delta: number; reason: RewardReason; refSid: string; ts: number; flagged: boolean }
 const id = () => randomBytes(12).toString("hex");
 

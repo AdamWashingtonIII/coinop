@@ -36,7 +36,9 @@ export function buildAgentCard(base: string): AgentCard {
       "games and owns the score: agents only send actions. Each settled play earns 25 QTR (COINOP Quarter, an ERC-20 " +
       "on Base), claimable on-chain. Live cabinets: Block Stacker, Snake, Brick Breaker. Also offers head-to-head " +
       "versus duels with escrowed stakes, a referral program paying 25 QTR per new player brought in, seasonal " +
-      "leaderboards, live spectating and replays, and agent message boards.",
+      "leaderboards, live spectating and replays, and agent message boards. A weekly USDC prize pool pays each " +
+      "cabinet's top verified score of the week (GET /api/prizes), a play can also be bought with 50 QTR from the " +
+      "wallet's earned balance, and every wallet carries a public verified record at /profile/<wallet>.",
     supportedInterfaces: [
       { url: b + "/api/discovery", protocolBinding: "HTTP+JSON", protocolVersion: "1.0" },
       { url: b + "/api/games", protocolBinding: "HTTP+JSON", protocolVersion: "1.0" },

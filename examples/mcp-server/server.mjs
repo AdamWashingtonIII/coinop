@@ -67,6 +67,19 @@ async function payFlow(path, body) {
   return paid.json;
 }
 
+async function insertCoinQtr(gameSlug) {
+  if (!account) throw new Error("AGENT_PRIVATE_KEY not set — QTR payment needs the wallet key");
+  const n = await api("/api/coin/qtr-nonce?wallet=" + account.address);
+  if (n.status !== 200) throw new Error("qtr nonce failed: " + n.status + " " + JSON.stringify(n.json));
+  const signature = await account.signMessage({ message: n.json.message });
+  const paid = await api("/api/coin", { method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ gameSlug, payWith: "qtr", wallet: account.address, nonce: n.json.nonce, signature }) });
+  if (paid.status !== 200) throw new Error("QTR payment rejected: " + paid.status + " " + JSON.stringify(paid.json));
+  session = { token: paid.json.sessionToken, sid: paid.json.sid, gameSlug, expiresAt: paid.json.expiresAt };
+  return { sid: session.sid, gameSlug, expiresAt: session.expiresAt, reward: paid.json.reward, paidWith: "qtr", qtrSpent: paid.json.qtrSpent,
+    note: "Session token held by the MCP server. Play with coinop_state / coinop_act; extend with coinop_heartbeat." };
+}
+
 async function insertCoin(gameSlug, referralCode) {
   const paid = await payFlow("/api/coin", { gameSlug, ...(referralCode ? { referralCode } : {}) });
   session = { token: paid.sessionToken, sid: paid.sid, gameSlug, expiresAt: paid.expiresAt };
@@ -86,10 +99,17 @@ const TOOLS = [
   { name: "coinop_games", description: "List the COINOP arcade catalog: games, rules, actions, prices, rewards, boards.",
     inputSchema: { type: "object", properties: {} },
     run: async () => (await api("/api/games")).json },
-  { name: "coinop_insert_coin", description: "Pay exactly 0.25 USDC (x402, Base) to start a play session on a cabinet. Starts the 90s session clock. Optional referralCode: if another agent referred you, pass their code on your FIRST-EVER coin — when you complete your first game they earn 25 QTR. Late/self/unknown codes are ignored.",
+  { name: "coinop_insert_coin", description: "Pay exactly 0.25 USDC (x402, Base) to start a play session on a cabinet. Starts the 90s session clock. Optional referralCode: if another agent referred you, pass their code on your FIRST-EVER coin — when you complete your first game they earn 25 QTR. Late/self/unknown codes are ignored. Set payWith to 'qtr' to pay 50 QTR from your claimable balance instead (the 25 QTR reward still accrues).",
     inputSchema: { type: "object", properties: { gameSlug: { type: "string", description: "stacker | snake | breaker" },
+      payWith: { type: "string", enum: ["usdc", "qtr"], description: "usdc (default): 0.25 USDC via x402. qtr: 50 QTR from your earned balance." },
       referralCode: { type: "string", description: "Optional: a referrer's QTR-XXXXXXXX code, only meaningful on your first-ever play" } }, required: ["gameSlug"] },
-    run: async (a) => insertCoin(a.gameSlug, a.referralCode) },
+    run: async (a) => a.payWith === "qtr" ? insertCoinQtr(a.gameSlug) : insertCoin(a.gameSlug, a.referralCode) },
+  { name: "coinop_prizes", description: "The weekly USDC prize pool: current pool, per-cabinet shares, this week's leaders, and payouts already made. Each cabinet's best verified score of the week (Mon 00:00 ET) takes its share, paid automatically in USDC.",
+    inputSchema: { type: "object", properties: { week: { type: "string", description: "Optional past week key YYYY-MM-DD (a Monday)" } } },
+    run: async (a) => (await api("/api/prizes" + (a.week ? "?week=" + a.week : ""))).json },
+  { name: "coinop_record", description: "A wallet's public verified record: best score and all-time rank per cabinet, games played, QTR earned. Defaults to the server's agent wallet.",
+    inputSchema: { type: "object", properties: { wallet: { type: "string" } } },
+    run: async (a) => (await api("/api/agents/record?wallet=" + (a.wallet ?? account?.address ?? ""))).json },
   { name: "coinop_state", description: "Current server-authoritative state of your play session.",
     inputSchema: { type: "object", properties: {} },
     run: async () => (await api("/api/play/state", { headers: bearer() })).json },

@@ -111,3 +111,17 @@ export const agentProfiles = pgTable("agent_profiles", {
   wallet: text("wallet").primaryKey(), name: text("name"), capabilities: jsonb("capabilities"),
   blurb: text("blurb"), updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
+
+// Prize pool (ADR 0016): USDC micro-units in an append-only ledger — seed and
+// payout rows are written only after on-chain verification of their tx hash
+// (unique), rake rows ride along with each settled USDC coin-in.
+export const prizeLedger = pgTable("prize_ledger", {
+  id: text("id").primaryKey(), kind: text("kind").notNull(), // seed | rake | rake_reversal | payout
+  amountMicro: bigint("amount_micro", { mode: "bigint" }).notNull(),
+  wallet: text("wallet"), gameSlug: text("game_slug"), weekKey: text("week_key"),
+  refId: text("ref_id"), txHash: text("tx_hash"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (t) => [uniqueIndex("prize_ledger_tx_idx").on(t.txHash)]);
+export const qtrPlayNonces = pgTable("qtr_play_nonces", {
+  nonce: text("nonce").primaryKey(), wallet: text("wallet").notNull(), exp: timestamp("exp").notNull(),
+});

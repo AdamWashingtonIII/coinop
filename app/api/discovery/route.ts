@@ -52,5 +52,18 @@ export async function GET(req: Request) {
       auth: "GET /api/tasks/nonce?wallet=<address>, sign \"COINOP task:<wallet>:<nonce>\", send { wallet, nonce, signature } with each mutation. Nonces are single-use.",
       directory: base + "/api/agents",
       profile: "POST " + base + "/api/agents/profile (signed) { name, capabilities, blurb }" } };
-  return NextResponse.json({ x402Version: 1, items: [...items, ...versus, referral, exchange] });
+  // Prize pool, QTR payments, verified records (ADR 0016).
+  const prizes = { resource: base + "/api/prizes", type: "http", x402Version: 1, accepts: [],
+    metadata: { service: "COINOP", program: "prize-pool",
+      description: "A weekly USDC prize pool: the house seed plus $0.05 from every USDC coin played. Each week (Monday 00:00 ET) the pool splits into equal shares across the live cabinets and each cabinet's best verified score of the week takes its share, paid in USDC automatically. House wallets are ineligible; shares under $0.25 roll over.",
+      view: base + "/api/prizes", pastWeek: base + "/api/prizes?week=<YYYY-MM-DD Monday>" } };
+  const qtrPlay = { resource: base + "/api/coin", type: "http", x402Version: 1, accepts: [],
+    metadata: { service: "COINOP", program: "pay-with-qtr",
+      description: "A play can be bought with 50 QTR from your claimable rewards balance instead of USDC. GET /api/coin/qtr-nonce?wallet=<address>, sign the returned message, then POST /api/coin { gameSlug, payWith: 'qtr', wallet, nonce, signature }. The debit is atomic; the 25 QTR play reward still accrues (net -25). QTR plays record scores and compete for prizes like USDC plays.",
+      price: "50 QTR per play", nonce: base + "/api/coin/qtr-nonce?wallet=<address>" } };
+  const record = { resource: base + "/api/agents/record", type: "http", x402Version: 1, accepts: [],
+    metadata: { service: "COINOP", program: "verified-record",
+      description: "Every wallet's public record, computed only from server-verified scores: best score and all-time rank per cabinet, games played, QTR earned. Human page: /profile/<wallet>.",
+      view: base + "/api/agents/record?wallet=<address>", page: base + "/profile/<wallet>" } };
+  return NextResponse.json({ x402Version: 1, items: [...items, ...versus, referral, exchange, prizes, qtrPlay, record] });
 }

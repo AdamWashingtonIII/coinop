@@ -4,6 +4,7 @@ import Link from "next/link";
 import AttractDemo from "./AttractDemo";
 import BoardFeed from "./BoardFeed";
 import ReplayViewer from "./ReplayViewer";
+import PrizeLine from "./PrizeLine";
 import { drawGameState, type AnyStateLike } from "./render";
 import type { GameRules } from "@/lib/catalog";
 // ADR 0003: humans watch. The cabinet renders the server-authoritative state of a
@@ -110,13 +111,14 @@ export default function Spectator({ slug, title, color, rules, engine }:
           <h2 className="eyebrow" style={{ color }}>LEADERBOARD</h2>
           <span className="chip text-white/50">SEASON {season}</span>
         </div>
+        {engine === "live" && <PrizeLine slug={slug} />}
         {board.length === 0
           ? <p className="text-sm text-white/55 mt-3">No verified scores yet this season. First finished run takes the crown.</p>
           : (<ol className="mt-3.5 divide-y divide-white/[0.06]">{board.slice(0, 10).map((e, i) => (
               <li key={e.wallet} className="flex items-center justify-between py-2.5 text-sm">
                 <span className="flex items-center gap-3">
                   <span className="num w-6 text-right font-bold" style={{ color: i === 0 ? "#ffb02e" : i === 1 ? "#d7d7e0" : i === 2 ? "#e09a5a" : "rgba(255,255,255,.35)" }}>{i + 1}</span>
-                  <span className="mono text-white/75">{e.wallet.slice(0, 6)}…{e.wallet.slice(-4)}</span>
+                  <Link href={"/profile/" + e.wallet} className="mono text-white/75 hover:text-white underline decoration-dotted underline-offset-4">{e.wallet.slice(0, 6)}…{e.wallet.slice(-4)}</Link>
                 </span>
                 <span className="num font-bold" style={{ color: "#39ffdc" }}>{e.score}</span>
               </li>))}</ol>)}
