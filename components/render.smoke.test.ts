@@ -48,7 +48,7 @@ describe("renderer smoke", () => {
   it("grand prix: hand-made edge states do not throw", () => {
     const ctx = stubCtx(320, 300); // 1x backing store still works
     const base = new GrandPrixGame(() => 0, 5).state() as unknown as Record<string, unknown>;
-    drawGameState(ctx, { ...base, lat: 1.3, offTrack: true, crashes: 2, throttle: -1 } as AnyStateLike, "#ffb02e");
+    drawGameState(ctx, { ...base, lat: 1.3, offTrack: true, crashes: 2, throttle: -1 } as unknown as AnyStateLike, "#ffb02e");
     drawGameState(ctx, { ...base, lat: -1.3, rivals: [], road: [] } as unknown as AnyStateLike, "#ffb02e");
   });
   it("other cabinets still draw at the enlarged backing size", () => {
