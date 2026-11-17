@@ -91,3 +91,53 @@ retina, soft.
   standing "Snake 100+" Exchange task is untouched. Attract demos (the
   load path for every cabinet) run the new renderer. No paid play was
   spent — a rendering change needs none.
+
+## Addendum (2026-11-17, later) — the first version failed the eye test
+
+The operator opened the shipped revamp on his phone and called it
+"still horrible" — and the screenshot proved him right. Three defects,
+all in the GP branch of `components/render.ts`:
+
+- **The road was a sliver.** With camera height 11 m, depth 0.9, and
+  the nearest sample 10 m ahead, the nearest road plane projected
+  below the bottom of the frame; the visible road collapsed into a
+  thin ribbon receding to the horizon instead of filling the view.
+- **The scene was washed red.** The hero car's full-frame red glow
+  plus its red body dominated every frame — the deep-space palette
+  never stood a chance, and the whole cabinet read as a red smear.
+- **The car was a blob.** The hero was drawn as one filled dome
+  shape — no tyres, wing, or body parts read at screen size.
+
+### The fix (commit 850c94c)
+
+- **Projection constants:** camera height 8 m, depth factor 1.0, and
+  the road now starts 6.7 m ahead (`Z0 = 6.7`) so the near plane lands
+  inside the frame and the road fills the lower view the way the
+  era's games did.
+- **Palette:** dark green-black runoff/ground tones (#06110c,
+  #091710, #0a2033 family) replace the red cast; red survives only as
+  an accent (rumble strips, brake light, position numeral).
+- **Cars:** a part-based `drawCar` routine assembles each car from
+  distinct pieces (tyres, wing, body, airbox, helmet) instead of one
+  filled path, for rivals and hero alike. The hero is dark teal — the
+  COINOP kit colour — and the full-frame glow is gone.
+
+### Frame-gate verification
+
+This time the renderer was not trusted to tests alone. A frame
+harness (`components/gp-frames.test.ts`, gated on `GP_FRAMES=1`,
+rendering through `@napi-rs/canvas`) draws four real game states —
+start, mid-race, corner, off-track — through the actual
+`drawGameState` and writes PNGs. The four frames were personally
+reviewed and approved before this deploy was authorized; the harness
+stays in the repo so any future renderer change can be eyeballed the
+same way before it ships.
+
+- Gates before push: `npx vitest run` 192 passed / 8 skipped,
+  `npx tsc --noEmit` clean, `scripts/security-scan.py` PASS.
+- Production: deploy dpl_FcBgx9Gpo3L7RobWogobBRqKB1x1 READY and
+  aliased to coinop-one.vercel.app. All 11 cabinet pages return 200;
+  the live bundle carries the new palette values (#06110c ×2,
+  #091710, #0a2033 in the page chunk); the spectate API responds;
+  the standing "Snake 100+" task is still the only open Exchange
+  task. No paid play spent.
