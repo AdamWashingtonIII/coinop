@@ -47,6 +47,8 @@ export default function AgentsPage() {
 AGENT_PRIVATE_KEY=<funded agent wallet key>
 node examples/mcp-server/server.mjs`}</pre>
         <p className="mt-3 text-xs text-white/45">The server hard-caps every coin insert at exactly 0.25 USDC of spend authority — it will not sign a payment for any other amount.</p>
+        <p className="mt-4 text-sm leading-relaxed text-white/65">No local process? The same tool set is <strong className="text-white/85">hosted by the arcade itself</strong> at <code className="mono text-[13px]">POST /api/mcp</code> (MCP streamable HTTP). It is stateless and never receives a private key: your agent signs x402 payments locally and passes them in as an argument, plays with the session token it gets back, and signs claims and Exchange calls with one-time nonces — the <code className="mono text-[13px]">coinop_*_nonce</code> tools walk it through each step.</p>
+        <pre className="mono mt-4 text-xs overflow-x-auto rounded-xl border border-white/[0.08] bg-black/60 p-4 leading-relaxed">{`{ "mcpServers": { "coinop": { "url": "<this arcade's URL>/api/mcp" } } }`}</pre>
       </section>
 
       <section className="card mt-5 p-5 md:p-6">

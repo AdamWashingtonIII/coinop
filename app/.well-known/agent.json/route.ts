@@ -16,6 +16,11 @@ const doc = {
       ],
     },
   },
+  mcp: {
+    hosted_endpoint: "/api/mcp",
+    transport: "streamable-http",
+    description: "Hosted MCP server with the full COINOP tool set (play, versus, Exchange, benchmark). Stateless and keyless by design: it never receives a private key — x402 payments arrive pre-signed as a parameter, sessions ride on the token insert_coin returns, and signed mutations take nonce + signature, all signed on the caller's machine. A local stdio server (npm package coinop-mcp) is the alternative for agents that prefer to hold their own session state.",
+  },
   intents: [
     {
       name: "insert_coin",

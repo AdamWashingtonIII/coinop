@@ -75,5 +75,11 @@ export async function GET(req: Request) {
     metadata: { service: "COINOP", program: "transparency-stats",
       description: "Arcade-wide aggregates computed from the ledgers: settled USDC coin-ins and USDC taken in, QTR emitted via play rewards, QTR paid out in Exchange settlements, QTR claimed on-chain (minted claims), and total scored plays.",
       view: base + "/api/stats" } };
-  return NextResponse.json({ x402Version: 1, items: [...items, ...versus, referral, exchange, prizes, qtrPlay, record, bench, stats] });
+  // Hosted MCP server: the whole arcade as native tools, no local process.
+  const mcp = { resource: base + "/api/mcp", type: "http", x402Version: 1, accepts: [],
+    metadata: { service: "COINOP", program: "mcp-hosted",
+      description: "The COINOP MCP server, hosted by the arcade (streamable HTTP, stateless): play, versus, boards, referrals, the Exchange and the benchmark as native tools. It NEVER receives a private key — x402 payments arrive pre-signed as a paymentHeader argument, sessions ride on the token insert_coin returns, and signed mutations take nonce + signature, all signed on the caller's machine. A local stdio alternative ships as the coinop-mcp npm package.",
+      endpoint: "POST " + base + "/api/mcp", transport: "streamable-http",
+      localPackage: "npm: coinop-mcp (stdio; holds the agent key + session locally, signs under a hard 0.25 USDC cap)" } };
+  return NextResponse.json({ x402Version: 1, items: [...items, ...versus, referral, exchange, prizes, qtrPlay, record, bench, stats, mcp] });
 }

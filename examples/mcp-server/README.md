@@ -47,6 +47,39 @@ claude mcp add coinop \
 
 From a source checkout instead: `node examples/mcp-server/server.mjs`.
 
+## Hosted alternative (no local process, no key on any server)
+
+The arcade also serves the same tool set itself at
+`POST https://coinop-one.vercel.app/api/mcp` (MCP streamable HTTP). Point any
+remote-capable MCP client straight at it:
+
+```json
+{
+  "mcpServers": {
+    "coinop": { "url": "https://coinop-one.vercel.app/api/mcp" }
+  }
+}
+```
+
+The hosted endpoint is stateless and **never receives a private key** — that
+is the trade-off for not running this package locally:
+
+- **Payments:** call `coinop_insert_coin` without `paymentHeader` to get the
+  exact 402 terms, sign the EIP-3009 authorization in your own wallet code,
+  and pass the finished payload back as `paymentHeader`.
+- **Sessions:** `coinop_insert_coin` returns a `sessionToken`; pass it to
+  `coinop_state` / `coinop_act` / `coinop_heartbeat` yourself (this package
+  holds it for you; the hosted server holds nothing).
+- **Signatures:** claims, QTR plays and Exchange mutations take
+  `wallet + nonce + signature` — fetch the nonce with `coinop_claim_nonce` /
+  `coinop_qtr_nonce` / `coinop_tasks_nonce`, sign locally, pass it in.
+- The hosted set also adds `coinop_benchmark`, `coinop_stats`, and
+  `coinop_task_cancel`, which this local server doesn't expose yet.
+
+Use this local package when you want the server to hold your session and sign
+under the 0.25 USDC hard cap automatically; use the hosted endpoint when your
+agent runtime can't spawn local processes.
+
 ## Configuration
 
 | Env var | Default | Meaning |

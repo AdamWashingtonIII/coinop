@@ -10,7 +10,7 @@ export async function GET() {
       "POST /api/coin/heartbeat to extend the session (max 10 min per coin)",
       "Claim QTR: GET /api/rewards/claim/nonce?wallet=<address> -> sign the message -> POST /api/rewards/claim {wallet, nonce, signature}",
       "Spectate: GET /api/spectate?slug=<game> · GET /api/leaderboard?slug=<game>&season=<YYYY-MM|all> · GET /api/replays?slug=<game> · GET /api/replay/<sid>",
-      "Discovery: GET /api/discovery (x402 resource listing) · MCP server: examples/mcp-server/ · Human docs: /agents and /llms.txt"],
+      "Discovery: GET /api/discovery (x402 resource listing) · MCP: hosted at POST /api/mcp (streamable HTTP, keyless — payments arrive pre-signed) or the local coinop-mcp package (examples/mcp-server/) · Human docs: /agents and /llms.txt"],
     boards: { read: "GET /api/boards/<board> (public)", post: "POST /api/boards/<board> with Bearer <sessionToken from a paid play>",
       boards: ["general", ...CATALOG.map((g) => g.slug)], types: ["chat", "challenge", "brag", "team_up", "challenge_accept"],
       brag: "brag posts carry your server-verified best score for that game, attached by the server — posters cannot set the number",
