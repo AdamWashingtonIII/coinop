@@ -78,6 +78,24 @@ function shade(hex: string, f: number): string {
   const c = (v: number) => Math.max(0, Math.min(255, Math.round(v * f)));
   return `rgb(${c(r)},${c(g)},${c(b)})`;
 }
+// A contrasting accent for a rival's livery: the body colour's hue
+// rotated ~150° and lifted to a bright, readable lightness, so each
+// car on the grid pairs its paint with a stripe colour that pops
+// against it — distinct teams, not one car recoloured.
+function accentOf(hex: string): string {
+  const [r, g, b] = hexRgb(hex);
+  const rn = r / 255, gn = g / 255, bn = b / 255;
+  const mx = Math.max(rn, gn, bn), mn = Math.min(rn, gn, bn), d = mx - mn;
+  let hd = 0;
+  if (d > 0) hd = mx === rn ? 60 * (((gn - bn) / d) % 6) : mx === gn ? 60 * ((bn - rn) / d + 2) : 60 * ((rn - gn) / d + 4);
+  hd = (hd + 150 + 360) % 360;
+  const L = 0.64, S = 0.72, C = (1 - Math.abs(2 * L - 1)) * S, X = C * (1 - Math.abs(((hd / 60) % 2) - 1)), m = L - C / 2;
+  let ro = 0, go = 0, bo = 0;
+  if (hd < 60) { ro = C; go = X; } else if (hd < 120) { ro = X; go = C; }
+  else if (hd < 180) { go = C; bo = X; } else if (hd < 240) { go = X; bo = C; }
+  else if (hd < 300) { ro = X; bo = C; } else { ro = C; bo = X; }
+  return `rgb(${Math.round((ro + m) * 255)},${Math.round((go + m) * 255)},${Math.round((bo + m) * 255)})`;
+}
 function vgrad(ctx: CanvasRenderingContext2D, y0: number, y1: number, stops: [number, string][]): CanvasGradient {
   const g = ctx.createLinearGradient(0, y0, 0, y1);
   for (const [o, c] of stops) g.addColorStop(o, c);
@@ -521,17 +539,24 @@ export function drawGameState(ctx: CanvasRenderingContext2D, state: AnyStateLike
     ctx.fillRect(0, 0, W, horizon + 2);
     const farDx = Math.max(-60, Math.min(60, dxAt(DRAW_N)));
     const cloud = (x: number, y: number, sc: number) => {
+      // Puffy clusters: a shaded underside, a broad lit base, and two
+      // overlapping top puffs — flat 90s sky furniture, never bare.
       ctx.fillStyle = "rgba(176,200,228,.75)";
-      ctx.beginPath(); ctx.ellipse(x, y + sc * 0.32, sc * 3.1, sc * 0.78, 0, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(x, y + sc * 0.34, sc * 3.2, sc * 0.80, 0, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(x - sc * 1.6, y + sc * 0.30, sc * 1.7, sc * 0.55, 0, 0, 7); ctx.fill();
       ctx.fillStyle = "rgba(255,255,255,.95)";
       ctx.beginPath(); ctx.ellipse(x, y, sc * 2.6, sc * 0.95, 0, 0, 7); ctx.fill();
       ctx.beginPath(); ctx.ellipse(x - sc * 1.9, y + sc * 0.22, sc * 1.5, sc * 0.62, 0, 0, 7); ctx.fill();
       ctx.beginPath(); ctx.ellipse(x + sc * 2.0, y + sc * 0.18, sc * 1.7, sc * 0.7, 0, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(x + sc * 0.35, y - sc * 0.52, sc * 1.55, sc * 0.72, 0, 0, 7); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(x - sc * 0.75, y - sc * 0.34, sc * 1.15, sc * 0.55, 0, 0, 7); ctx.fill();
     };
-    cloud(W * 0.16 + farDx * 0.22, horizon * 0.30, 5.2);
-    cloud(W * 0.52 + farDx * 0.16, horizon * 0.16, 3.8);
-    cloud(W * 0.83 + farDx * 0.26, horizon * 0.38, 6.0);
-    cloud(W * 0.36 + farDx * 0.20, horizon * 0.52, 3.0);
+    cloud(W * 0.16 + farDx * 0.22, horizon * 0.30, 6.4);
+    cloud(W * 0.52 + farDx * 0.16, horizon * 0.16, 4.4);
+    cloud(W * 0.83 + farDx * 0.26, horizon * 0.38, 7.2);
+    cloud(W * 0.36 + farDx * 0.20, horizon * 0.52, 3.4);
+    cloud(W * 0.64 + farDx * 0.18, horizon * 0.58, 2.7);
+    cloud(W * 0.05 + farDx * 0.24, horizon * 0.62, 2.4);
     // City skyline behind the hills — only on the start/finish
     // stretch, fading with the grandstand window; pure hills
     // elsewhere. Two hazy rows (pale far, deeper near), a couple of
@@ -570,6 +595,15 @@ export function drawGameState(ctx: CanvasRenderingContext2D, state: AnyStateLike
       const sx = W * fx + farDx * 0.6, sw = W * 0.17, sh = H * 0.052;
       ctx.fillRect(sx, horizon - sh, sw, sh);
       ctx.fillRect(sx - 2, horizon - sh - 3, sw + 4, 3); // roof line
+    }
+    // A whisper of low city blocks along the horizon on EVERY stretch
+    // (the full skyline above is a start/finish extra) — very faint,
+    // blue-grey, so the distance is never bare hills alone. The
+    // tree-line ridges drawn next bury the blocks' feet.
+    ctx.fillStyle = "rgba(148,178,214,.30)";
+    for (let i = 0; i < 26; i++) {
+      const bh = 3 + ((i * 53) % 7) + (i % 6 === 4 ? 2.5 : 0);
+      ctx.fillRect(i * (W / 26) + farDx * 0.35, horizon - bh, (W / 26) * 0.7, bh + 1);
     }
     const ridge = (base: number, amp: number, f1: number, f2: number, shift: number, fill: string) => {
       ctx.fillStyle = fill;
@@ -699,6 +733,37 @@ export function drawGameState(ctx: CanvasRenderingContext2D, state: AnyStateLike
       };
       pile(cx, v);
       pile(cx + side * 3.0 * ppm, v + 1);
+    };
+    // A pit-box canopy on the pit lane: a dark back panel with a
+    // team-colour band, a slanted awning on two posts — simple shapes
+    // in the billboards' kit, read as the pit complex behind the wall.
+    const PIT_COLS = ["#c9332c", "#3f6fb5", "#e0a83c", "#39ffdc", "#e8e4da", "#7a4fd0"];
+    const drawPitBox = (cx: number, baseY: number, ppm: number, idx: number, alpha: number) => {
+      const pw2 = 8.4 * ppm, ph2 = 3.6 * ppm, x0 = cx - pw2 / 2, topY = baseY - ph2;
+      ctx.save(); ctx.globalAlpha = alpha;
+      ctx.fillStyle = "#3a3f45"; // posts
+      const postW = Math.max(0.6, 0.3 * ppm);
+      ctx.fillRect(x0 + 0.5 * ppm, topY + 0.7 * ppm, postW, ph2 - 0.7 * ppm);
+      ctx.fillRect(x0 + pw2 - 0.5 * ppm - postW, topY + 0.7 * ppm, postW, ph2 - 0.7 * ppm);
+      ctx.fillStyle = "#20262d"; // back panel
+      ctx.fillRect(x0, topY + 0.9 * ppm, pw2, ph2 - 0.9 * ppm);
+      ctx.fillStyle = PIT_COLS[idx % PIT_COLS.length]; // team band
+      ctx.fillRect(x0, topY + 0.9 * ppm, pw2, 1.15 * ppm);
+      ctx.fillStyle = "rgba(255,255,255,.16)"; // panel sheen + a dark bay opening
+      ctx.fillRect(x0, topY + 2.05 * ppm, pw2, 0.28 * ppm);
+      ctx.fillStyle = "rgba(0,0,0,.5)";
+      ctx.fillRect(x0 + pw2 * 0.30, topY + 2.4 * ppm, pw2 * 0.4, ph2 - 2.4 * ppm);
+      // awning: a slanted slab overhanging the panel, team colour
+      // with a pale front edge
+      ctx.fillStyle = PIT_COLS[idx % PIT_COLS.length];
+      ctx.beginPath();
+      ctx.moveTo(x0 - 0.7 * ppm, topY + 0.95 * ppm); ctx.lineTo(x0 + pw2 + 0.7 * ppm, topY + 0.95 * ppm);
+      ctx.lineTo(x0 + pw2 + 0.2 * ppm, topY); ctx.lineTo(x0 - 0.2 * ppm, topY);
+      ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = "rgba(0,0,0,.4)"; ctx.lineWidth = Math.max(0.5, ppm * 0.08); ctx.stroke(); ctx.lineWidth = 1;
+      ctx.fillStyle = "rgba(255,255,255,.55)";
+      ctx.fillRect(x0 - 0.7 * ppm, topY + 0.82 * ppm, pw2 + 1.4 * ppm, Math.max(0.4, 0.16 * ppm));
+      ctx.restore();
     };
     // The start/finish grandstand stands on the right inside the
     // start/finish window (standAlpha, computed with the projection
@@ -891,6 +956,89 @@ export function drawGameState(ctx: CanvasRenderingContext2D, state: AnyStateLike
           quad(cxB + hwB * (uA * 2 - 1), cxB + hwB * (uB * 2 - 1), cxA + hwA * (uB * 2 - 1), cxA + hwA * (uA * 2 - 1), yB, yA);
         }
       }
+      // --- start/finish furniture painted with the road band: grid
+      // slots, the pit wall, catch fencing. All keyed to the absolute
+      // segment like the scenery below (480 segments to a lap).
+      const poly = (p: readonly (readonly [number, number])[]) => {
+        ctx.beginPath(); ctx.moveTo(p[0][0], p[0][1]);
+        for (let i = 1; i < p.length; i++) ctx.lineTo(p[i][0], p[i][1]);
+        ctx.closePath(); ctx.fill();
+      };
+      const segLap = ((abs % 480) + 480) % 480;
+      if (segLap <= 4) {
+        // staggered start-grid slots painted on the asphalt — one row
+        // per segment, columns alternating, so the grid the rivals
+        // line up on is drawn on the track itself
+        const colOff = abs % 2 === 0 ? -0.42 : 0.42;
+        const spt = (f: number, u: number) => {
+          const yy = yF + (yN - yF) * f, cc = cxF + (cxN - cxF) * f, hh2 = hwF + (hwN - hwF) * f;
+          return [cc + hh2 * u, yy] as const;
+        };
+        const c1 = spt(0.88, colOff - 0.39), c2 = spt(0.88, colOff + 0.39), c3 = spt(0.14, colOff + 0.39), c4 = spt(0.14, colOff - 0.39);
+        ctx.strokeStyle = "rgba(255,255,255,.75)"; ctx.lineWidth = Math.max(0.6, ppmAt(k) * 0.09);
+        ctx.beginPath();
+        ctx.moveTo(c1[0], c1[1]); ctx.lineTo(c2[0], c2[1]); ctx.lineTo(c3[0], c3[1]); ctx.lineTo(c4[0], c4[1]);
+        ctx.closePath(); ctx.stroke(); ctx.lineWidth = 1;
+      }
+      if (standAlpha > 0 && k >= 6 && k <= 18) {
+        // pit wall on the left, opposite the grandstand: a long low
+        // concrete wall with a painted top edge and a teal pinstripe,
+        // COINOP lettered on its face
+        const ppmN = ppmAt(k), ppmF = ppmAt(k + 1);
+        const wx = (kk: number) => cxAt(kk) - hwAt(kk) * 1.44;
+        ctx.save(); ctx.globalAlpha = standAlpha;
+        ctx.fillStyle = k % 2 ? "#8f979f" : "#99a1a8";
+        poly([[wx(k), yN], [wx(k + 1), yF], [wx(k + 1), yF - ppmF * 1.05], [wx(k), yN - ppmN * 1.05]]);
+        ctx.fillStyle = "rgba(0,0,0,.22)"; // base shadow band
+        poly([[wx(k), yN], [wx(k + 1), yF], [wx(k + 1), yF - ppmF * 0.14], [wx(k), yN - ppmN * 0.14]]);
+        ctx.fillStyle = "#edf1f4"; // painted top edge
+        poly([[wx(k), yN - ppmN * 1.05], [wx(k + 1), yF - ppmF * 1.05], [wx(k + 1), yF - ppmF * 0.85], [wx(k), yN - ppmN * 0.85]]);
+        ctx.fillStyle = "rgba(57,255,220,.75)"; // teal pinstripe under the cap
+        poly([[wx(k), yN - ppmN * 0.85], [wx(k + 1), yF - ppmF * 0.85], [wx(k + 1), yF - ppmF * 0.78], [wx(k), yN - ppmN * 0.78]]);
+        if (k === 13 && ppmN >= 0.5) {
+          ctx.fillStyle = "#07332b";
+          ctx.font = `bold ${ppmN * 0.5}px Arial, sans-serif`;
+          ctx.textAlign = "center"; ctx.textBaseline = "middle";
+          ctx.fillText("COINOP", wx(k), yN - ppmN * 0.42);
+          ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+        }
+        ctx.restore();
+      }
+      {
+        // catch fencing just outside the kerbs: a faint mesh wash,
+        // three wire lines and posts every other segment — lining the
+        // whole start/finish stretch and scattered runs elsewhere,
+        // hashed from the absolute segment like all GP scenery
+        const startStretch = segLap < 42 || segLap >= 452;
+        const scattered = shash(abs >> 3, 4242, 7, 11) % 4 === 0;
+        const ppmK = ppmAt(k);
+        if ((startStretch || scattered) && ppmK >= 0.22) {
+          const FH = 2.3, BO = 1.37;
+          const fpt = (kk: number, side: number, f: number) => {
+            const yy = yAt(kk), pp = ppmAt(kk);
+            return [cxAt(kk) + side * hwAt(kk) * BO, yy - pp * FH * f] as const;
+          };
+          for (const side of [-1, 1]) {
+            if (standAlpha > 0 && side > 0 && k >= 9 && k <= 20) continue; // grandstand frontage
+            if (standAlpha > 0 && side < 0 && k >= 6 && k <= 18) continue; // the pit wall stands here
+            const b0 = fpt(k, side, 0), b1 = fpt(k + 1, side, 0), t0 = fpt(k, side, 1), t1 = fpt(k + 1, side, 1);
+            ctx.fillStyle = "rgba(205,222,238,.05)";
+            poly([b0, b1, t1, t0]);
+            if (ppmK >= 0.3) {
+              ctx.fillStyle = "rgba(215,228,242,.30)";
+              for (const f of [0.36, 0.68, 1.0]) {
+                const a = fpt(k, side, f), b = fpt(k + 1, side, f), th = Math.max(0.4, ppmK * 0.045);
+                poly([a, b, [b[0], b[1] + th], [a[0], a[1] + th]]);
+              }
+              if (abs % 2 === 0) { // fence post at this segment's near edge
+                const pw3 = Math.max(0.5, ppmK * 0.08);
+                ctx.fillStyle = "rgba(38,44,52,.85)";
+                ctx.fillRect(b0[0] - pw3 / 2, t0[1], pw3, b0[1] - t0[1]);
+              }
+            }
+          }
+        }
+      }
       // scenery anchored to this segment, painted with its band so
       // nearer segments overpaint farther scenery bases
       if (k === GS_K && standAlpha > 0) drawGrandstand(k, standAlpha);
@@ -898,9 +1046,21 @@ export function drawGameState(ctx: CanvasRenderingContext2D, state: AnyStateLike
       if (ppm >= 0.34 && k >= 2) {
         const h = shash(abs, abs * 31 + 7, Math.round(cv * 24), Math.round((dxv(k + 1) - dxv(k)) * 4));
         const nearStand = standAlpha > 0 && k >= 8 && k <= 20;
+        const pitSeg = standAlpha > 0 && (k === 9 || k === 12 || k === 15);
+        const wallZone = standAlpha > 0 && k >= 6 && k <= 18;
+        if (h % 7 === 3) {
+          // mow patch: a big soft tonal ellipse on the grass, so the
+          // fields read as mown ground, not flat colour bands
+          const pside = (h >>> 9) % 2 === 0 ? -1 : 1;
+          ctx.fillStyle = (h >>> 11) % 2 ? "rgba(255,255,214,.05)" : "rgba(8,46,18,.06)";
+          ctx.beginPath();
+          ctx.ellipse(cxN + pside * hwN * 2.9, (yN + yF) / 2, hwN * 1.6, Math.max(1, (yN - yF) * 1.6), 0, 0, 7);
+          ctx.fill();
+        }
+        if (pitSeg) drawPitBox(cxN - hwN * 2.35, yN, ppm, k / 3 - 3, standAlpha);
         if (h % 5 === 2) {
           const side = (h >>> 6) % 2 === 0 ? -1 : 1;
-          if (!(nearStand && side > 0)) {
+          if (!(nearStand && side > 0) && !(wallZone && side < 0)) {
             const tt = (h >>> 4) % 10;
             const bx = cxN + side * hwN * (tt < 5 ? 2.05 : tt < 8 ? 1.85 : 1.5);
             if (tt < 5) drawBillboard(bx, yN, ppm, (h >>> 8) % 5);
@@ -909,12 +1069,12 @@ export function drawGameState(ctx: CanvasRenderingContext2D, state: AnyStateLike
           }
         } else if (h % 11 === 5) { // a rarer, larger board standing closer
           const side = (h >>> 6) % 2 === 0 ? -1 : 1;
-          if (!(nearStand && side > 0)) drawBillboard(cxN + side * hwN * 1.72, yN, ppm, (h >>> 8) % 5, true);
+          if (!(nearStand && side > 0) && !(wallZone && side < 0)) drawBillboard(cxN + side * hwN * 1.72, yN, ppm, (h >>> 8) % 5, true);
         }
         // tyre stacks guard the inside of strong corners
         if (Math.abs(cv) >= 0.6 && shash(abs, 777, k, 3) % 3 === 0) {
           const side = cv > 0 ? 1 : -1;
-          if (!(nearStand && side > 0)) drawTyreStack(cxN + side * hwN * 1.52, yN, ppm, (h >>> 5) % 3, side);
+          if (!(nearStand && side > 0) && !(wallZone && side < 0)) drawTyreStack(cxN + side * hwN * 1.52, yN, ppm, (h >>> 5) % 3, side);
         }
       }
     }
@@ -934,7 +1094,7 @@ export function drawGameState(ctx: CanvasRenderingContext2D, state: AnyStateLike
     // outline, so the silhouette reads as a detailed car at any distance;
     // fine detail fades in as the car grows.
     const RIVAL_LABELS = ["APEX", "NOVA", "VOLT", "ONYX", "GRID"];
-    const drawCar = (x: number, groundY: number, w: number, hex: string, hero: boolean, label: string) => {
+    const drawCar = (x: number, groundY: number, w: number, hex: string, hero: boolean, label: string, accent: string, scheme: number) => {
       const h = w * 0.5;
       const Y = (f: number) => groundY - h * f; // height fraction -> y
       const dark = shade(hex, 0.45), darker = shade(hex, 0.28), light = shade(hex, 1.45);
@@ -950,28 +1110,36 @@ export function drawGameState(ctx: CanvasRenderingContext2D, state: AnyStateLike
       ctx.fillStyle = "rgba(0,0,0,.45)";
       ctx.beginPath(); ctx.ellipse(x - w * 0.375, groundY - h * 0.015, w * 0.10, h * 0.045, 0, 0, 7); ctx.fill();
       ctx.beginPath(); ctx.ellipse(x + w * 0.375, groundY - h * 0.015, w * 0.10, h * 0.045, 0, 0, 7); ctx.fill();
-      // very wide rear tyres at the outer edges of the lower car
+      // very wide rear tyres at the outer edges of the lower car —
+      // chunkier now, and shaded like rubber in sun: a lit shoulder
+      // rolling down through mid-tones to a near-black contact band
       const tyre = (tx: number) => {
-        ctx.fillStyle = "#0a0a0d";
-        part(tx, Y(0.56), w * 0.19, h * 0.56, Math.min(3, w * 0.03));
+        const tw = w * 0.20, tt = Y(0.64), th = h * 0.64;
+        const tg = ctx.createLinearGradient(0, tt, 0, groundY);
+        tg.addColorStop(0, "#2e2e34"); tg.addColorStop(0.38, "#141418");
+        tg.addColorStop(0.78, "#0a0a0d"); tg.addColorStop(1, "#030304");
+        ctx.fillStyle = tg;
+        part(tx, tt, tw, th, Math.min(3, w * 0.03));
+        ctx.fillStyle = "rgba(255,255,255,.14)"; // lit shoulder band
+        ctx.fillRect(tx + w * 0.014, tt + h * 0.025, tw - w * 0.028, h * 0.05);
+        ctx.fillStyle = "rgba(0,0,0,.55)"; // contact band pressed to the road
+        ctx.fillRect(tx + w * 0.006, groundY - h * 0.055, tw - w * 0.012, h * 0.05);
         if (w >= 56) { // tread grooves across the contact face
           ctx.fillStyle = "rgba(255,255,255,.08)";
           for (let g = 1; g <= 4; g++)
-            ctx.fillRect(tx + (w * 0.19 * g) / 5 - w * 0.006, Y(0.56) + h * 0.03, w * 0.012, h * 0.50);
-          ctx.fillRect(tx + w * 0.012, Y(0.30), w * 0.166, h * 0.028);
+            ctx.fillRect(tx + (tw * g) / 5 - w * 0.006, tt + h * 0.04, w * 0.012, h * 0.56);
+          ctx.fillRect(tx + w * 0.012, tt + th * 0.55, tw - w * 0.024, h * 0.028);
         }
         if (w >= 34) { // sidewall ring
           ctx.strokeStyle = "#3d3d46"; ctx.lineWidth = Math.max(1, w * 0.013);
-          rr(ctx, tx + w * 0.038, Y(0.56) + h * 0.085, w * 0.114, h * 0.39, Math.min(2, w * 0.02)); ctx.stroke(); ctx.lineWidth = 1;
+          rr(ctx, tx + w * 0.042, tt + h * 0.095, w * 0.116, h * 0.45, Math.min(2, w * 0.02)); ctx.stroke(); ctx.lineWidth = 1;
         }
         if (hero && w >= 40) { // teal tyre ring on the hero, tyre-supplier style
           ctx.strokeStyle = "rgba(57,255,220,.45)"; ctx.lineWidth = Math.max(0.8, w * 0.010);
-          rr(ctx, tx + w * 0.020, Y(0.56) + h * 0.045, w * 0.150, h * 0.47, Math.min(2.5, w * 0.025)); ctx.stroke(); ctx.lineWidth = 1;
+          rr(ctx, tx + w * 0.022, tt + h * 0.05, w * 0.156, h * 0.54, Math.min(2.5, w * 0.025)); ctx.stroke(); ctx.lineWidth = 1;
         }
-        ctx.fillStyle = "rgba(255,255,255,.10)"; // top sheen
-        ctx.fillRect(tx + w * 0.014, Y(0.56) + h * 0.02, w * 0.162, h * 0.055);
       };
-      tyre(x - w * 0.47); tyre(x + w * 0.28);
+      tyre(x - w * 0.475); tyre(x + w * 0.275);
       // suspension: lower wishbones, an upper arm and a pushrod per
       // side, running from the body out to upright blocks at the
       // tyres' inner faces
@@ -993,7 +1161,8 @@ export function drawGameState(ctx: CanvasRenderingContext2D, state: AnyStateLike
       // body / engine cover: ~45% of car width at the top, tapering up
       // from a wider base between the tyres, shaded light -> base -> dark
       const bg = ctx.createLinearGradient(0, Y(0.62), 0, groundY);
-      bg.addColorStop(0, light); bg.addColorStop(0.45, hex); bg.addColorStop(1, dark);
+      bg.addColorStop(0, light); bg.addColorStop(0.35, shade(hex, 1.15));
+      bg.addColorStop(0.7, hex); bg.addColorStop(1, darker);
       ctx.fillStyle = bg;
       ctx.beginPath();
       ctx.moveTo(x - w * 0.17, Y(0.62)); ctx.lineTo(x + w * 0.17, Y(0.62));
@@ -1001,12 +1170,19 @@ export function drawGameState(ctx: CanvasRenderingContext2D, state: AnyStateLike
       ctx.lineTo(x - w * 0.34, Y(0.08)); ctx.lineTo(x - w * 0.30, Y(0.28));
       ctx.closePath(); ctx.fill();
       ctx.strokeStyle = ol; ctx.lineWidth = lw; ctx.stroke(); ctx.lineWidth = 1;
-      // livery: a bold centre stripe down the cover + a centre highlight
-      ctx.fillStyle = hero ? "rgba(57,255,220,.85)" : "rgba(255,255,255,.50)";
-      ctx.beginPath();
-      ctx.moveTo(x - w * 0.052, Y(0.615)); ctx.lineTo(x + w * 0.052, Y(0.615));
-      ctx.lineTo(x + w * 0.030, Y(0.13)); ctx.lineTo(x - w * 0.030, Y(0.13));
-      ctx.closePath(); ctx.fill();
+      // livery stripes down the cover, in the car's accent — the
+      // scheme varies per car (centre stripe, twin stripes, plain,
+      // pinstripe) so the grid reads as distinct teams
+      const stripeBand = (off: number, hTop: number, hBot: number) => {
+        ctx.beginPath();
+        ctx.moveTo(x + off - hTop, Y(0.615)); ctx.lineTo(x + off + hTop, Y(0.615));
+        ctx.lineTo(x + off + hBot, Y(0.13)); ctx.lineTo(x + off - hBot, Y(0.13));
+        ctx.closePath(); ctx.fill();
+      };
+      ctx.fillStyle = accent;
+      if (scheme === 0) stripeBand(0, w * 0.052, w * 0.030);
+      else if (scheme === 1) { stripeBand(-w * 0.052, w * 0.030, w * 0.018); stripeBand(w * 0.052, w * 0.030, w * 0.018); }
+      else if (scheme === 3) { ctx.globalAlpha = 0.8; stripeBand(0, w * 0.014, w * 0.008); ctx.globalAlpha = 1; }
       ctx.fillStyle = "rgba(255,255,255,.12)";
       ctx.beginPath();
       ctx.moveTo(x - w * 0.035, Y(0.60)); ctx.lineTo(x + w * 0.035, Y(0.60));
@@ -1032,17 +1208,31 @@ export function drawGameState(ctx: CanvasRenderingContext2D, state: AnyStateLike
       // sidepod shoulders: sculpted blocks low on the flanks carrying
       // the livery — a bold accent sweep across each shoulder
       for (const m of [-1, 1]) {
-        ctx.fillStyle = shade(hex, 0.8);
+        const pg = ctx.createLinearGradient(0, Y(0.40), 0, Y(0.16));
+        pg.addColorStop(0, shade(hex, 1.02)); pg.addColorStop(1, shade(hex, 0.5));
+        ctx.fillStyle = pg;
         ctx.beginPath();
         ctx.moveTo(x + m * w * 0.13, Y(0.40)); ctx.lineTo(x + m * w * 0.29, Y(0.40));
         ctx.lineTo(x + m * w * 0.30, Y(0.16)); ctx.lineTo(x + m * w * 0.20, Y(0.16));
         ctx.closePath(); ctx.fill();
         ctx.strokeStyle = ol; ctx.lineWidth = lw; ctx.stroke(); ctx.lineWidth = 1;
-        ctx.fillStyle = hero ? "rgba(57,255,220,.8)" : "rgba(255,255,255,.45)";
-        ctx.beginPath();
-        ctx.moveTo(x + m * w * 0.15, Y(0.375)); ctx.lineTo(x + m * w * 0.27, Y(0.375));
-        ctx.lineTo(x + m * w * 0.28, Y(0.335)); ctx.lineTo(x + m * w * 0.165, Y(0.335));
-        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = accent;
+        if (scheme === 2) {
+          // sidepod-block livery: the accent takes the whole shoulder
+          ctx.globalAlpha = 0.9;
+          ctx.beginPath();
+          ctx.moveTo(x + m * w * 0.145, Y(0.385)); ctx.lineTo(x + m * w * 0.283, Y(0.385));
+          ctx.lineTo(x + m * w * 0.29, Y(0.185)); ctx.lineTo(x + m * w * 0.205, Y(0.185));
+          ctx.closePath(); ctx.fill();
+          ctx.globalAlpha = 1;
+        } else {
+          ctx.globalAlpha = 0.85;
+          ctx.beginPath();
+          ctx.moveTo(x + m * w * 0.15, Y(0.375)); ctx.lineTo(x + m * w * 0.27, Y(0.375));
+          ctx.lineTo(x + m * w * 0.28, Y(0.335)); ctx.lineTo(x + m * w * 0.165, Y(0.335));
+          ctx.closePath(); ctx.fill();
+          ctx.globalAlpha = 1;
+        }
       }
       if (hero && w >= 80) { // number roundels on the engine-cover flanks
         for (const m of [-1, 1]) {
@@ -1056,6 +1246,13 @@ export function drawGameState(ctx: CanvasRenderingContext2D, state: AnyStateLike
           ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
         }
       }
+      // the rear wing's shadow, thrown soft across the engine cover —
+      // the spine and airbox drawn next cut through its middle,
+      // leaving the shade lying on the bodywork either side of them
+      ctx.fillStyle = "rgba(0,0,0,.18)";
+      ctx.beginPath(); ctx.ellipse(x, Y(0.58), w * 0.33, h * 0.07, 0, 0, 7); ctx.fill();
+      ctx.fillStyle = "rgba(0,0,0,.10)";
+      ctx.beginPath(); ctx.ellipse(x, Y(0.525), w * 0.37, h * 0.055, 0, 0, 7); ctx.fill();
       // exposed rear machinery between the tyres: engine block panel,
       // a four-tip exhaust cluster, diffuser strakes low — the
       // reference's busy rear end
@@ -1102,11 +1299,34 @@ export function drawGameState(ctx: CanvasRenderingContext2D, state: AnyStateLike
       ctx.lineTo(x + w * 0.085, Y(0.30)); ctx.lineTo(x - w * 0.085, Y(0.30));
       ctx.closePath(); ctx.fill();
       ctx.strokeStyle = ol; ctx.lineWidth = lw; ctx.stroke(); ctx.lineWidth = 1;
-      ctx.fillStyle = hero ? "rgba(57,255,220,.85)" : "rgba(255,255,255,.50)"; // livery stripe rides the spine
-      ctx.beginPath();
-      ctx.moveTo(x - w * 0.028, Y(0.555)); ctx.lineTo(x + w * 0.028, Y(0.555));
-      ctx.lineTo(x + w * 0.042, Y(0.315)); ctx.lineTo(x - w * 0.042, Y(0.315));
-      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = accent; // livery stripe rides the spine, same scheme as the cover
+      if (scheme === 0) {
+        ctx.beginPath();
+        ctx.moveTo(x - w * 0.028, Y(0.555)); ctx.lineTo(x + w * 0.028, Y(0.555));
+        ctx.lineTo(x + w * 0.042, Y(0.315)); ctx.lineTo(x - w * 0.042, Y(0.315));
+        ctx.closePath(); ctx.fill();
+      } else if (scheme === 1) {
+        for (const o of [-0.024, 0.024]) {
+          ctx.beginPath();
+          ctx.moveTo(x + (o - 0.011) * w, Y(0.555)); ctx.lineTo(x + (o + 0.011) * w, Y(0.555));
+          ctx.lineTo(x + (o + 0.013) * w, Y(0.315)); ctx.lineTo(x + (o - 0.013) * w, Y(0.315));
+          ctx.closePath(); ctx.fill();
+        }
+      } else if (scheme === 3) {
+        ctx.globalAlpha = 0.8;
+        ctx.beginPath();
+        ctx.moveTo(x - w * 0.007, Y(0.555)); ctx.lineTo(x + w * 0.007, Y(0.555));
+        ctx.lineTo(x + w * 0.009, Y(0.315)); ctx.lineTo(x - w * 0.009, Y(0.315));
+        ctx.closePath(); ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+      if (w >= 30) { // specular streak down the spine's lit shoulder
+        ctx.fillStyle = "rgba(255,255,255,.20)";
+        ctx.beginPath();
+        ctx.moveTo(x - w * 0.052, Y(0.55)); ctx.lineTo(x - w * 0.036, Y(0.55));
+        ctx.lineTo(x - w * 0.048, Y(0.33)); ctx.lineTo(x - w * 0.066, Y(0.33));
+        ctx.closePath(); ctx.fill();
+      }
       if (w >= 56) {
         ctx.strokeStyle = "rgba(0,0,0,.35)"; ctx.lineWidth = Math.max(0.5, w * 0.005);
         for (const f of [0.40, 0.47]) { // panel seams across the spine
@@ -1133,6 +1353,13 @@ export function drawGameState(ctx: CanvasRenderingContext2D, state: AnyStateLike
         ctx.strokeStyle = "rgba(255,255,255,.28)"; ctx.lineWidth = Math.max(0.5, w * 0.004);
         rr(ctx, x - w * 0.044, Y(0.86) + h * 0.028, w * 0.088, h * 0.115, w * 0.018); ctx.stroke(); ctx.lineWidth = 1;
       }
+      if (w >= 20) { // specular streak down the airbox's lit edge
+        ctx.fillStyle = "rgba(255,255,255,.18)";
+        ctx.beginPath();
+        ctx.moveTo(x - w * 0.056, Y(0.855)); ctx.lineTo(x - w * 0.042, Y(0.855));
+        ctx.lineTo(x - w * 0.080, Y(0.545)); ctx.lineTo(x - w * 0.096, Y(0.545));
+        ctx.closePath(); ctx.fill();
+      }
       if (hero && w >= 60) { // QTR roundel on the airbox
         ctx.fillStyle = "#39ffdc";
         ctx.beginPath(); ctx.arc(x, Y(0.63), w * 0.040, 0, 7); ctx.fill();
@@ -1151,10 +1378,12 @@ export function drawGameState(ctx: CanvasRenderingContext2D, state: AnyStateLike
       if (w >= 26) {
         ctx.fillStyle = hex; // helmet crown in the car's colour
         ctx.beginPath(); ctx.ellipse(x, Y(0.46), w * 0.068, h * 0.135, 0, Math.PI, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = hero ? "#39ffdc" : "#f2f6fa"; // crown stripe
+        ctx.fillStyle = accent; // crown stripe in the livery accent
         ctx.fillRect(x - w * 0.016, Y(0.578), w * 0.032, h * 0.055);
         ctx.fillStyle = "#0a0d14"; // visor band
         ctx.fillRect(x - w * 0.058, Y(0.485), w * 0.116, h * 0.05);
+        ctx.fillStyle = "rgba(255,255,255,.75)"; // gloss spot on the crown
+        ctx.beginPath(); ctx.ellipse(x - w * 0.026, Y(0.545), w * 0.014, h * 0.026, -0.5, 0, 7); ctx.fill();
       }
       // mirror stalks at the body's top corners
       if (w >= 40) {
@@ -1173,16 +1402,22 @@ export function drawGameState(ctx: CanvasRenderingContext2D, state: AnyStateLike
       ctx.fillStyle = shade(hex, 0.6);
       ctx.fillRect(x - w * 0.085, Y(0.84), w * 0.05, h * 0.24);
       ctx.fillRect(x + w * 0.035, Y(0.84), w * 0.05, h * 0.24);
-      ctx.fillStyle = shade(hex, 0.8); // lower wing plane
+      const lg = ctx.createLinearGradient(0, Y(0.74), 0, Y(0.68)); // lower wing plane
+      lg.addColorStop(0, shade(hex, 0.95)); lg.addColorStop(1, shade(hex, 0.62));
+      ctx.fillStyle = lg;
       part(x - w * 0.44, Y(0.74), w * 0.88, h * 0.06, 1.2);
+      ctx.fillStyle = shade(hex, 0.42); // its darker underside
+      ctx.fillRect(x - w * 0.44, Y(0.68), w * 0.88, h * 0.018);
       ctx.fillStyle = shade(hex, 0.65); // endplates
       part(x - w * 0.50, Y(0.97), w * 0.035, h * 0.33, 1.2);
       part(x + w * 0.465, Y(0.97), w * 0.035, h * 0.33, 1.2);
       const wg = ctx.createLinearGradient(0, Y(0.94), 0, Y(0.82)); // main plane
-      wg.addColorStop(0, light); wg.addColorStop(1, hex);
+      wg.addColorStop(0, light); wg.addColorStop(0.55, shade(hex, 1.15)); wg.addColorStop(1, hex);
       ctx.fillStyle = wg;
       part(x - w * 0.50, Y(0.94), w, h * 0.12, 1.5);
-      ctx.fillStyle = hero ? "#39ffdc" : "rgba(255,255,255,.4)"; // accent stripe
+      ctx.fillStyle = shade(hex, 0.30); // the main plane's dark underside face
+      ctx.fillRect(x - w * 0.50, Y(0.82), w, h * 0.02);
+      ctx.fillStyle = accent; // accent stripe in the livery accent
       ctx.fillRect(x - w * 0.50, Y(0.845), w, h * 0.022);
       ctx.fillStyle = shade(hex, 0.5); // gurney flap along the plane's top edge
       ctx.fillRect(x - w * 0.50, Y(0.952), w, Math.max(0.6, h * 0.02));
@@ -1204,7 +1439,7 @@ export function drawGameState(ctx: CanvasRenderingContext2D, state: AnyStateLike
     for (const r of vis) {
       const z = Z0 + r.relS, sc = CAM_D / z;
       const x = W / 2 + sc * (dxAt(r.relS / SEG_M) + r.lat * ROAD_HALF - camX) * (W / 2);
-      drawCar(x, horizon + sc * CAM_H * (H / 2), Math.max(3, sc * 6.2 * (W / 2)), r.color, false, RIVAL_LABELS[r.id % RIVAL_LABELS.length]);
+      drawCar(x, horizon + sc * CAM_H * (H / 2), Math.max(3, sc * 6.2 * (W / 2)), r.color, false, RIVAL_LABELS[r.id % RIVAL_LABELS.length], accentOf(r.color), r.id % 4);
     }
     // --- hero car: pinned low-centre like the era's games, leaning on
     // the wheel and bouncing harder the faster it goes. It wears the
@@ -1226,7 +1461,7 @@ export function drawGameState(ctx: CanvasRenderingContext2D, state: AnyStateLike
     }
     ctx.save();
     ctx.translate(heroX, heroY); ctx.rotate(steer * 0.035); ctx.translate(-heroX, -heroY);
-    drawCar(heroX, heroY, heroW, "#0b4f45", true, "COINOP");
+    drawCar(heroX, heroY, heroW, "#0b4f45", true, "COINOP", "#39ffdc", 0);
     ctx.restore();
 
     // --- HUD: timing-tower strip up top, lap data low left, pedal lamps
