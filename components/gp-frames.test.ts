@@ -48,10 +48,16 @@ describe.skipIf(process.env.GP_FRAMES !== "1")("grand prix proof frames", () => 
     frame(mid, "midrace.png");
 
     // corner: a strong right-hander scripted into the road samples, car
-    // committed at speed with the wheel turned in.
+    // committed at speed with the wheel turned in. The curve has a
+    // profile — gentle entry, apex 1.15 at sample 17, easing out — so
+    // the brake boards count down to a real apex and the chevron board
+    // and spectator bank have somewhere to stand.
     const corner: GrandPrixState = {
       ...new GrandPrixGame(() => 0, 5).state(),
-      road: Array.from({ length: 40 }, (_, k) => ({ dx: 80 * (k / 39) ** 2, curve: 1.1 })),
+      road: Array.from({ length: 40 }, (_, k) => ({
+        dx: 80 * (k / 39) ** 2,
+        curve: k < 6 ? 0.18 : k < 17 ? 0.18 + 0.97 * ((k - 6) / 11) : 1.15 - 0.45 * ((k - 17) / 22),
+      })),
       rivals: [
         { id: 0, relS: 34, lat: -0.45, kmh: 250, color: "#4da3ff" },
         { id: 1, relS: 88, lat: 0.5, kmh: 245, color: "#b26bff" },

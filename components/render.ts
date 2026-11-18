@@ -616,6 +616,11 @@ export function drawGameState(ctx: CanvasRenderingContext2D, state: AnyStateLike
     };
     ridge(H * 0.052, H * 0.030, 0.020, 0.047, farDx * 0.5, "#86b877");
     ridge(H * 0.026, H * 0.020, 0.031, 0.083, farDx * 1.15, "#679c5c");
+    // atmospheric fade: a breath of sky-blue haze lying over the
+    // whole distance, thickening toward the horizon line so the far
+    // hills, stands and skyline sit IN the air, not on it
+    ctx.fillStyle = vgrad(ctx, horizon - H * 0.15, horizon + 2, [[0, "rgba(207,232,255,0)"], [1, "rgba(207,232,255,.20)"]]);
+    ctx.fillRect(0, horizon - H * 0.15, W, H * 0.15 + 2);
 
     // --- trackside scenery, anchored to ABSOLUTE circuit segments. The
     // segment index comes from the renderer odometer (gpDistance: the
@@ -898,6 +903,156 @@ export function drawGameState(ctx: CanvasRenderingContext2D, state: AnyStateLike
       }
     };
 
+    // A brake marker board: white panel, black numerals, two posts —
+    // the 150 / 100 / 50 countdown every period circuit put before a
+    // corner, and the first thing a driver looks for at the end of a
+    // straight.
+    const drawBrakeBoard = (cx: number, baseY: number, ppm: number, label: string) => {
+      const bw = 4.2 * ppm, bh = 2.4 * ppm, postH = 0.8 * ppm;
+      const x0 = cx - bw / 2, yTop = baseY - postH - bh;
+      ctx.fillStyle = "#3a3f45"; // posts
+      const pw = Math.max(0.6, 0.26 * ppm);
+      ctx.fillRect(cx - bw * 0.30 - pw / 2, baseY - postH, pw, postH);
+      ctx.fillRect(cx + bw * 0.30 - pw / 2, baseY - postH, pw, postH);
+      ctx.fillStyle = "#eef1f4";
+      ctx.fillRect(x0, yTop, bw, bh);
+      ctx.strokeStyle = "#14161a"; ctx.lineWidth = Math.max(0.7, ppm * 0.12);
+      ctx.strokeRect(x0, yTop, bw, bh); ctx.lineWidth = 1;
+      if (bw >= 5) {
+        ctx.fillStyle = "#14161a";
+        ctx.font = `bold ${bh * 0.62}px Arial, sans-serif`;
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText(label, cx, yTop + bh / 2 + 0.5);
+        ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+      }
+    };
+    // The apex chevron board: a white panel of red arrows pointing
+    // the way the corner goes, on posts at the outside of the apex.
+    const drawChevron = (cx: number, baseY: number, ppm: number, sgn: number) => {
+      const bw = 6.4 * ppm, bh = 2.3 * ppm, postH = 0.8 * ppm;
+      const x0 = cx - bw / 2, yTop = baseY - postH - bh;
+      ctx.fillStyle = "#3a3f45"; // posts
+      const pw = Math.max(0.6, 0.26 * ppm);
+      ctx.fillRect(cx - bw * 0.32 - pw / 2, baseY - postH, pw, postH);
+      ctx.fillRect(cx + bw * 0.32 - pw / 2, baseY - postH, pw, postH);
+      ctx.fillStyle = "#eef1f4";
+      ctx.fillRect(x0, yTop, bw, bh);
+      ctx.strokeStyle = "rgba(0,0,0,.5)"; ctx.lineWidth = Math.max(0.6, ppm * 0.1);
+      ctx.strokeRect(x0, yTop, bw, bh); ctx.lineWidth = 1;
+      if (bw >= 5) {
+        ctx.strokeStyle = "#c9332c"; ctx.lineWidth = Math.max(1, ppm * 0.34);
+        ctx.lineJoin = "miter";
+        const qw = bw / 3.6, midY = yTop + bh / 2, amp = bh * 0.30;
+        for (let q = 0; q < 3; q++) {
+          const ax = x0 + bw * 0.10 + q * qw;
+          ctx.beginPath();
+          if (sgn > 0) { ctx.moveTo(ax, midY - amp); ctx.lineTo(ax + qw * 0.55, midY); ctx.lineTo(ax, midY + amp); }
+          else { ctx.moveTo(ax + qw * 0.55, midY - amp); ctx.lineTo(ax, midY); ctx.lineTo(ax + qw * 0.55, midY + amp); }
+          ctx.stroke();
+        }
+        ctx.lineWidth = 1;
+      }
+    };
+    // A marshal post: a small hut with a slate roof, a door, a lit
+    // window slit, and a flag pole with the marshal's orange flag —
+    // scattered around the lap wherever the hash puts one.
+    const drawMarshalPost = (cx: number, baseY: number, ppm: number, v: number) => {
+      const mw = 2.3 * ppm, mh = 1.9 * ppm, x0 = cx - mw / 2, topY = baseY - mh;
+      ctx.fillStyle = "rgba(0,0,0,.25)"; // ground shadow
+      ctx.beginPath(); ctx.ellipse(cx, baseY, mw * 0.62, Math.max(0.5, ppm * 0.16), 0, 0, 7); ctx.fill();
+      ctx.fillStyle = "#dde3e8"; // hut walls
+      ctx.fillRect(x0, topY + 0.42 * ppm, mw, mh - 0.42 * ppm);
+      ctx.strokeStyle = "rgba(0,0,0,.4)"; ctx.lineWidth = Math.max(0.5, ppm * 0.07);
+      ctx.strokeRect(x0, topY + 0.42 * ppm, mw, mh - 0.42 * ppm); ctx.lineWidth = 1;
+      ctx.fillStyle = "#37424e"; // roof slab with an overhang
+      ctx.fillRect(x0 - 0.28 * ppm, topY, mw + 0.56 * ppm, 0.42 * ppm);
+      ctx.fillStyle = "rgba(120,180,230,.8)"; // window slit
+      ctx.fillRect(x0 + 0.18 * ppm, topY + 0.62 * ppm, mw - 0.36 * ppm, 0.30 * ppm);
+      ctx.fillStyle = "#232a33"; // door
+      ctx.fillRect(cx - 0.30 * ppm, baseY - 0.85 * ppm, 0.60 * ppm, 0.85 * ppm);
+      // flag pole + the marshal's flag
+      ctx.strokeStyle = "#2c3138"; ctx.lineWidth = Math.max(0.5, ppm * 0.07);
+      const fx = x0 + mw * (v ? 0.82 : 0.18);
+      ctx.beginPath(); ctx.moveTo(fx, topY); ctx.lineTo(fx, topY - 1.05 * ppm); ctx.stroke(); ctx.lineWidth = 1;
+      ctx.fillStyle = "#ff8c1a";
+      ctx.fillRect(fx, topY - 1.05 * ppm, (v ? 1 : -1) * 0.55 * ppm, 0.34 * ppm);
+    };
+    // The second grandstand out around the lap: two tiers, a thin
+    // roof on two posts, the house banner — the main stand's smaller
+    // sibling, standing on hash-chosen stretches.
+    const drawMiniStand = (k: number, side: number) => {
+      const baseY = yAt(k), ppm = ppmAt(k);
+      const sw = 34 * ppm, sh = 9.5 * ppm;
+      const xEdge = cxAt(k) + side * hwAt(k) * 1.52;
+      const x0 = side > 0 ? xEdge : xEdge - sw;
+      const topY = baseY - sh;
+      const banH = 1.7 * ppm, seatTop = topY + sh * 0.20, seatBot = baseY - banH;
+      const tierH = (seatBot - seatTop) / 2;
+      ctx.fillStyle = "#8d9aa7"; // base block behind the tiers
+      ctx.fillRect(x0, seatTop, sw, seatBot - seatTop);
+      const crowdCols = ["#c94f43", "#e8e4da", "#3f6fb5", "#e0a83c", "#5da24a", "#7a4fd0"];
+      for (let r = 0; r < 2; r++) {
+        const by = seatTop + r * tierH;
+        ctx.fillStyle = r % 2 ? "#a3aeba" : "#98a5b3";
+        ctx.fillRect(x0, by, sw, tierH);
+        ctx.fillStyle = "rgba(240,246,255,.75)"; // railing along the tier front
+        ctx.fillRect(x0, by + tierH - Math.max(0.6, ppm * 0.22), sw, Math.max(0.5, ppm * 0.16));
+        if (ppm > 0.42) { // crowd speckle, jittered within the tier
+          const n = Math.floor(sw / 1.05);
+          for (let i = 0; i < n; i++) {
+            const hh = ((i * 37 + r * 131) * 2654435761) >>> 0;
+            if (hh % 6 === 0) continue;
+            ctx.fillStyle = crowdCols[hh % 6];
+            ctx.fillRect(x0 + 0.6 + (hh % Math.max(2, Math.floor(sw - 1.2))), by + 0.5 + ((hh >>> 7) % 40) / 40 * Math.max(0.6, tierH - 1.2), 1.05, 1.05);
+          }
+        }
+      }
+      // thin roof on two posts, teal under-edge like the main stand
+      ctx.fillStyle = "#333f4d";
+      ctx.fillRect(x0 + 0.4 * ppm, topY + 0.8 * ppm, 0.5 * ppm, seatTop - topY - 0.6 * ppm);
+      ctx.fillRect(x0 + sw - 0.9 * ppm, topY + 0.8 * ppm, 0.5 * ppm, seatTop - topY - 0.6 * ppm);
+      ctx.fillStyle = "#22303e";
+      ctx.fillRect(x0 - 1.0 * ppm, topY, sw + 2.0 * ppm, 0.8 * ppm);
+      ctx.fillStyle = "#39ffdc";
+      ctx.fillRect(x0 - 1.0 * ppm, topY + 0.8 * ppm, sw + 2.0 * ppm, 0.3 * ppm);
+      // front banner across the base
+      const by2 = baseY - banH;
+      ctx.fillStyle = "#06231f"; ctx.fillRect(x0, by2, sw, banH);
+      ctx.fillStyle = "#39ffdc"; ctx.fillRect(x0, by2, sw, Math.max(0.5, 0.28 * ppm));
+      if (sw >= 20) {
+        ctx.fillStyle = "#39ffdc";
+        ctx.font = `bold ${Math.min(banH * 0.60, sw / 5.8)}px Arial, sans-serif`;
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText("COINOP", x0 + sw / 2, by2 + banH / 2 + 0.5);
+        ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+      }
+    };
+    // --- brake marker boards + apex chevrons, read off the road
+    // samples ahead: for every strong corner run (|curve| >= 0.55),
+    // boards counting 150 / 100 / 50 stand on the OUTSIDE at those
+    // distances before the apex, and a chevron board marks the apex
+    // itself — the period game's way of shouting "brake now".
+    const boardsAt = new Map<number, { label: string; side: number }>();
+    const chevronsAt = new Map<number, number>();
+    {
+      let runStart = -1;
+      for (let i = 0; i <= road.length; i++) {
+        const strong = i < road.length && Math.abs(cvAt(i)) >= 0.55;
+        if (strong && runStart < 0) runStart = i;
+        if (!strong && runStart >= 0) {
+          let apex = runStart;
+          for (let j = runStart + 1; j < i; j++) if (Math.abs(cvAt(j)) > Math.abs(cvAt(apex))) apex = j;
+          const sgn = Math.sign(cvAt(apex)) || 1;
+          for (const [off, lab] of [[15, "150"], [10, "100"], [5, "50"]] as const) {
+            const bk = apex - off;
+            if (bk >= 2 && bk <= DRAW_N) boardsAt.set(bk, { label: lab, side: -sgn });
+          }
+          if (apex >= 2 && apex <= DRAW_N) chevronsAt.set(apex, sgn);
+          runStart = -1;
+        }
+      }
+    }
+
     // --- ground + road, far to near. Segment parity alternates the grass
     // (mow stripes) and asphalt shades; the sample window slides as the
     // car advances, so the bands stream toward the viewer — that
@@ -913,7 +1068,35 @@ export function drawGameState(ctx: CanvasRenderingContext2D, state: AnyStateLike
       ctx.fillRect(0, yF, W, yN - yF + 1);
       const cxN = cxAt(k), cxF = cxAt(k + 1), hwN = hwAt(k), hwF = hwAt(k + 1);
       const abs = baseSeg + k, cv = cvAt(k);
+      if (Math.abs(cv) >= 0.6 && shash(abs >> 2, 5150, 2, 8) % 3 !== 0) {
+        // spectator bank on the corner's OUTSIDE: a raised grass
+        // mound behind the fencing line, speckled with crowd — the
+        // hill people stood on before grandstands took over
+        const os = cv > 0 ? -1 : 1;
+        ctx.fillStyle = "rgba(22,66,20,.38)";
+        quad(cxN + os * hwN * 1.34, cxN + os * hwN * 3.05, cxF + os * hwF * 3.05, cxF + os * hwF * 1.34, yN, yF);
+        ctx.fillStyle = "rgba(150,200,115,.16)"; // lit crest along the road side
+        quad(cxN + os * hwN * 1.34, cxN + os * hwN * 1.75, cxF + os * hwF * 1.75, cxF + os * hwF * 1.34, yN, yF);
+        if (ppmAt(k) >= 0.3 && yN - yF >= 1.5) {
+          const bankCols = ["#c94f43", "#e8e4da", "#3f6fb5", "#e0a83c", "#5da24a", "#7a4fd0"];
+          for (let j = 0; j < 7; j++) {
+            const hh = shash(abs, j * 13 + 5, 77, 3);
+            const v = (hh % 100) / 100, u = ((hh >>> 8) % 100) / 100;
+            const cxv = cxF + (cxN - cxF) * v, hwv = hwF + (hwN - hwF) * v;
+            ctx.fillStyle = bankCols[hh % 6];
+            ctx.fillRect(cxv + os * hwv * (1.55 + u * 1.35), yF + (yN - yF) * (0.15 + v * 0.7), Math.max(0.7, ppmAt(k) * 0.15), Math.max(0.7, ppmAt(k) * 0.15));
+          }
+        }
+      }
+      // the kerbs' soft drop shadow onto the grass either side, so
+      // the blocks sit ON the ground instead of floating in it
+      ctx.fillStyle = "rgba(12,32,16,.20)";
+      quad(cxN - hwN * 1.44, cxN - hwN * 1.30, cxF - hwF * 1.30, cxF - hwF * 1.44, yN, yF);
+      quad(cxN + hwN * 1.30, cxN + hwN * 1.44, cxF + hwF * 1.44, cxF + hwF * 1.30, yN, yF);
       ctx.fillStyle = k % 4 < 2 ? "#cf352e" : "#eef1f4"; // BROAD kerbs at the edges
+      quad(cxN - hwN * 1.30, cxN - hwN, cxF - hwF, cxF - hwF * 1.30, yN, yF);
+      quad(cxN + hwN, cxN + hwN * 1.30, cxF + hwF * 1.30, cxF + hwF, yN, yF);
+      ctx.fillStyle = (abs >> 1) % 2 === 0 ? "rgba(255,255,255,.05)" : "rgba(0,0,0,.05)"; // alternating block tone
       quad(cxN - hwN * 1.30, cxN - hwN, cxF - hwF, cxF - hwF * 1.30, yN, yF);
       quad(cxN + hwN, cxN + hwN * 1.30, cxF + hwF * 1.30, cxF + hwF, yN, yF);
       ctx.fillStyle = k % 2 ? "#8f959c" : "#9aa0a7"; // asphalt, light grey
@@ -944,6 +1127,11 @@ export function drawGameState(ctx: CanvasRenderingContext2D, state: AnyStateLike
       if (k % 6 < 3) { // centre dashes
         ctx.fillStyle = "rgba(255,255,255,.38)";
         quad(cxN - hwN * 0.022, cxN + hwN * 0.022, cxF + hwF * 0.022, cxF - hwF * 0.022, yN, yF);
+      }
+      if (k >= 16) { // distance haze lying over the far road, so the
+        // track melts into the same air as the hills
+        ctx.fillStyle = `rgba(207,232,255,${Math.min(0.10, (k - 15) * 0.008)})`;
+        quad(cxN - hwN * 1.30, cxN + hwN * 1.30, cxF + hwF * 1.30, cxF - hwF * 1.30, yN, yF);
       }
       if (gantryK > 0 && Math.abs(k - gantryK) < 0.55 && yN - yF >= 1.2) {
         // the chequered start line painted across the asphalt
@@ -979,6 +1167,28 @@ export function drawGameState(ctx: CanvasRenderingContext2D, state: AnyStateLike
         ctx.beginPath();
         ctx.moveTo(c1[0], c1[1]); ctx.lineTo(c2[0], c2[1]); ctx.lineTo(c3[0], c3[1]); ctx.lineTo(c4[0], c4[1]);
         ctx.closePath(); ctx.stroke(); ctx.lineWidth = 1;
+      }
+      if (segLap === 2 && ppmAt(k) >= 1.2) {
+        // a COINOP word painted on the asphalt just past the line,
+        // ghosted and worn — period tracks sold the surface too.
+        // Drawn in a perspective transform anchored on this segment:
+        // squeezed across the road, stretched along it, and sheared
+        // with the centre-line shift over the next three segments.
+        const yBot = yAt(k), yTop = yAt(k + 3);
+        const cxB = cxAt(k), cxT = cxAt(k + 3), hwB = hwAt(k);
+        const F = 100, wordW = 6 * 0.64 * F;
+        const a = (hwB * 2 * 0.86) / wordW, d = ((yBot - yTop) * 1.25) / F, c = -(cxT - cxB) / F;
+        ctx.save();
+        ctx.translate((cxB + cxT) / 2, (yBot + yTop) / 2);
+        ctx.transform(a, 0, c, d, 0, 0);
+        ctx.font = `bold ${F}px Arial, sans-serif`;
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillStyle = "rgba(233,242,246,.19)";
+        ctx.fillText("COINOP", 0, 0);
+        ctx.fillStyle = "rgba(143,149,156,.10)"; // worn streaks across the paint
+        for (const wy of [-0.28, 0.05, 0.34]) ctx.fillRect(-wordW / 2, F * wy, wordW, F * 0.07);
+        ctx.restore();
+        ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
       }
       if (standAlpha > 0 && k >= 6 && k <= 18) {
         // pit wall on the left, opposite the grandstand: a long low
@@ -1042,6 +1252,14 @@ export function drawGameState(ctx: CanvasRenderingContext2D, state: AnyStateLike
       // scenery anchored to this segment, painted with its band so
       // nearer segments overpaint farther scenery bases
       if (k === GS_K && standAlpha > 0) drawGrandstand(k, standAlpha);
+      else if (k >= 5 && k <= 27 && shash(abs, 60606, 1, 2) % 19 === 0) {
+        // a second, smaller grandstand out around the lap, on
+        // hash-chosen stretches — kept clear of the main stand's
+        // frontage and the pit wall's run
+        const mside = (shash(abs, 707, 3, 4) >>> 5) % 2 === 0 ? -1 : 1;
+        const blocked = standAlpha > 0 && ((mside > 0 && k >= 8 && k <= 20) || (mside < 0 && k >= 6 && k <= 18));
+        if (!blocked) drawMiniStand(k, mside);
+      }
       const ppm = ppmAt(k);
       if (ppm >= 0.34 && k >= 2) {
         const h = shash(abs, abs * 31 + 7, Math.round(cv * 24), Math.round((dxv(k + 1) - dxv(k)) * 4));
@@ -1070,12 +1288,21 @@ export function drawGameState(ctx: CanvasRenderingContext2D, state: AnyStateLike
         } else if (h % 11 === 5) { // a rarer, larger board standing closer
           const side = (h >>> 6) % 2 === 0 ? -1 : 1;
           if (!(nearStand && side > 0) && !(wallZone && side < 0)) drawBillboard(cxN + side * hwN * 1.72, yN, ppm, (h >>> 8) % 5, true);
+        } else if (h % 9 === 4) { // a marshal post hut at scattered segments
+          const side = (h >>> 6) % 2 === 0 ? -1 : 1;
+          if (!(nearStand && side > 0) && !(wallZone && side < 0)) drawMarshalPost(cxN + side * hwN * 1.62, yN, ppm, (h >>> 8) % 2);
         }
         // tyre stacks guard the inside of strong corners
         if (Math.abs(cv) >= 0.6 && shash(abs, 777, k, 3) % 3 === 0) {
           const side = cv > 0 ? 1 : -1;
           if (!(nearStand && side > 0) && !(wallZone && side < 0)) drawTyreStack(cxN + side * hwN * 1.52, yN, ppm, (h >>> 5) % 3, side);
         }
+        // brake marker boards + the apex chevron for the corner
+        // ahead, placed by the precomputed corner scan
+        const bd = boardsAt.get(k);
+        if (bd && ppm >= 0.3) drawBrakeBoard(cxN + bd.side * hwN * 1.58, yN, ppm, bd.label);
+        const chS = chevronsAt.get(k);
+        if (chS !== undefined && ppm >= 0.3) drawChevron(cxN + -chS * hwN * 1.62, yN, ppm, chS);
       }
     }
     drawGantry();
@@ -1133,6 +1360,16 @@ export function drawGameState(ctx: CanvasRenderingContext2D, state: AnyStateLike
         if (w >= 34) { // sidewall ring
           ctx.strokeStyle = "#3d3d46"; ctx.lineWidth = Math.max(1, w * 0.013);
           rr(ctx, tx + w * 0.042, tt + h * 0.095, w * 0.116, h * 0.45, Math.min(2, w * 0.02)); ctx.stroke(); ctx.lineWidth = 1;
+        }
+        if (w >= 50) { // sidewall lettering: a ring of tiny pale ticks
+          // around the ring, the way tyre suppliers brand the rubber
+          ctx.fillStyle = "rgba(232,238,244,.5)";
+          const rx0 = tx + w * 0.042, ry0 = tt + h * 0.095, rw2 = w * 0.116, rh2 = h * 0.45;
+          for (let q = 0; q < 6; q++) ctx.fillRect(rx0 + rw2 * (0.08 + q * 0.15), ry0 + h * 0.018, Math.max(0.6, w * 0.016), Math.max(0.6, h * 0.02));
+          for (let q = 0; q < 3; q++) {
+            ctx.fillRect(rx0 + w * 0.008, ry0 + rh2 * (0.2 + q * 0.3), Math.max(0.6, w * 0.014), Math.max(0.6, h * 0.018));
+            ctx.fillRect(rx0 + rw2 - w * 0.022, ry0 + rh2 * (0.2 + q * 0.3), Math.max(0.6, w * 0.014), Math.max(0.6, h * 0.018));
+          }
         }
         if (hero && w >= 40) { // teal tyre ring on the hero, tyre-supplier style
           ctx.strokeStyle = "rgba(57,255,220,.45)"; ctx.lineWidth = Math.max(0.8, w * 0.010);
@@ -1246,6 +1483,37 @@ export function drawGameState(ctx: CanvasRenderingContext2D, state: AnyStateLike
           ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
         }
       }
+      // sponsor clutter: tiny house-brand blocks on the bodywork —
+      // real cars are covered in graphics; ours advertise the house
+      // (QTR / x402 / BASE / COINOP only, picked per car from its name)
+      if (w >= 64) {
+        const brands = ["QTR", "x402", "BASE", "COINOP"];
+        const shorts = ["QTR", "BASE", "x402"];
+        let bhsh = 0; for (let q = 0; q < label.length; q++) bhsh = (bhsh * 31 + label.charCodeAt(q)) >>> 0;
+        const micro = (tx: number, ty: number, word: string, fs: number, col: string) => {
+          ctx.fillStyle = col;
+          ctx.font = `bold ${fs}px Arial, sans-serif`;
+          ctx.textAlign = "center"; ctx.textBaseline = "middle";
+          ctx.fillText(word, tx, ty);
+          ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+        };
+        ctx.globalAlpha = 0.88;
+        for (const m of [-1, 1]) {
+          // sidepod face (the hero's flanks carry its number roundels
+          // instead — those ARE its flank graphics)
+          if (!hero) micro(x + m * w * 0.215, Y(0.285), brands[(bhsh + (m > 0 ? 1 : 0)) % 4], w * 0.040, "rgba(244,248,252,.85)");
+          micro(x + m * w * 0.152, Y(0.465), shorts[(bhsh + (m > 0 ? 2 : 1)) % 3], w * 0.030, "rgba(244,248,252,.55)"); // cover flank
+        }
+        ctx.globalAlpha = 1;
+      }
+      if (w >= 90) { // small accent blocks on the airbox sides
+        for (const m of [-1, 1]) {
+          ctx.fillStyle = accent;
+          ctx.fillRect(x + m * w * 0.066 - w * 0.013, Y(0.72), w * 0.026, h * 0.085);
+          ctx.fillStyle = "rgba(6,16,14,.8)";
+          ctx.fillRect(x + m * w * 0.066 - w * 0.006, Y(0.72) + h * 0.028, w * 0.012, h * 0.03);
+        }
+      }
       // the rear wing's shadow, thrown soft across the engine cover —
       // the spine and airbox drawn next cut through its middle,
       // leaving the shade lying on the bodywork either side of them
@@ -1284,7 +1552,8 @@ export function drawGameState(ctx: CanvasRenderingContext2D, state: AnyStateLike
         for (let q = 0; q < 4; q++) {
           const tipX = ex + ew * (0.14 + q * 0.24), tipW = ew * 0.15, tipH = eh * 0.62, tipY = ey + eh * 0.19;
           const tg = ctx.createLinearGradient(0, tipY, 0, tipY + tipH);
-          tg.addColorStop(0, "#aeb8c2"); tg.addColorStop(1, "#3a4048");
+          tg.addColorStop(0, "#b9c2cc"); tg.addColorStop(0.5, "#7e8ca3"); // blue steel
+          tg.addColorStop(0.78, "#96714a"); tg.addColorStop(1, "#40382c"); // bronze heat tint at the bore
           ctx.fillStyle = tg;
           rr(ctx, tipX, tipY, tipW, tipH, Math.min(1.5, tipW * 0.3)); ctx.fill();
           ctx.fillStyle = "#07080a"; // bore
@@ -1396,6 +1665,12 @@ export function drawGameState(ctx: CanvasRenderingContext2D, state: AnyStateLike
         part(x - w * 0.277, Y(0.685), w * 0.052, h * 0.055, 1);
         part(x + w * 0.225, Y(0.685), w * 0.052, h * 0.055, 1);
       }
+      if (w >= 40) { // antenna whisker off the cockpit's right shoulder
+        ctx.strokeStyle = "rgba(10,12,16,.85)"; ctx.lineWidth = Math.max(0.5, w * 0.005);
+        ctx.beginPath(); ctx.moveTo(x + w * 0.085, Y(0.52)); ctx.lineTo(x + w * 0.125, Y(0.68)); ctx.stroke(); ctx.lineWidth = 1;
+        ctx.fillStyle = accent;
+        ctx.beginPath(); ctx.arc(x + w * 0.125, Y(0.68), Math.max(0.6, w * 0.008), 0, 7); ctx.fill();
+      }
       // wing assembly: two pylons, a lower plane, endplates, and the main
       // plane on top carrying the car's name — drawn last, nearest the
       // viewer from behind
@@ -1417,10 +1692,34 @@ export function drawGameState(ctx: CanvasRenderingContext2D, state: AnyStateLike
       part(x - w * 0.50, Y(0.94), w, h * 0.12, 1.5);
       ctx.fillStyle = shade(hex, 0.30); // the main plane's dark underside face
       ctx.fillRect(x - w * 0.50, Y(0.82), w, h * 0.02);
+      if (w >= 70) { // carbon-fibre hint: a faint weave over the plane
+        const cs = Math.max(1.6, w * 0.016), px0 = x - w * 0.50, py0 = Y(0.94), pw2 = w, ph2 = h * 0.12;
+        for (let ry = 0; ry * cs < ph2; ry++) for (let rx = 0; rx * cs < pw2; rx++) {
+          ctx.fillStyle = (rx + ry) % 2 ? "rgba(0,0,0,.055)" : "rgba(255,255,255,.035)";
+          ctx.fillRect(px0 + rx * cs, py0 + ry * cs, cs, cs);
+        }
+      }
       ctx.fillStyle = accent; // accent stripe in the livery accent
       ctx.fillRect(x - w * 0.50, Y(0.845), w, h * 0.022);
       ctx.fillStyle = shade(hex, 0.5); // gurney flap along the plane's top edge
       ctx.fillRect(x - w * 0.50, Y(0.952), w, Math.max(0.6, h * 0.02));
+      if (w >= 70) { // a vertical sponsor word up each endplate, in the
+        // free band below the main plane — house brands only
+        const ebrands = ["QTR", "x402", "BASE"];
+        let eh = 0; for (let q = 0; q < label.length; q++) eh = (eh * 31 + label.charCodeAt(q)) >>> 0;
+        const [er, eg, eb] = hexRgb(hex);
+        ctx.fillStyle = (0.299 * er + 0.587 * eg + 0.114 * eb) > 140 ? "#12151c" : "#f4f8ff";
+        ctx.font = `bold ${w * 0.026}px Arial, sans-serif`;
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        for (const m of [-1, 1]) {
+          ctx.save();
+          ctx.translate(x + m * w * 0.4825, Y(0.715));
+          ctx.rotate(-Math.PI / 2);
+          ctx.fillText(ebrands[(eh + (m > 0 ? 1 : 0)) % 3], 0, 0);
+          ctx.restore();
+        }
+        ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+      }
       if (w >= 44 && label) { // the car's name across the wing
         const [lr, lg, lb] = hexRgb(hex);
         ctx.fillStyle = (0.299 * lr + 0.587 * lg + 0.114 * lb) > 140 ? "#12151c" : "#f4f8ff";
@@ -1433,6 +1732,18 @@ export function drawGameState(ctx: CanvasRenderingContext2D, state: AnyStateLike
         ctx.fillStyle = throttle < 0 ? "#ff2d20" : "rgba(255,45,32,.35)";
         if (throttle < 0) glowDot(ctx, x, Y(0.30), w * 0.05, "#ff2d20");
         ctx.fillRect(x - w * 0.017, Y(0.335), w * 0.034, h * 0.070);
+      }
+      if (w >= 34) { // T-cam: the onboard camera pod riding the airbox
+        // under the wing — a dark fin up to an orange-tipped pod with
+        // a lens glint, the dot every period broadcast seemed to frame
+        ctx.fillStyle = "#0b0c10";
+        ctx.fillRect(x - w * 0.007, Y(0.86), w * 0.014, h * 0.045);
+        rr(ctx, x - w * 0.037, Y(0.815), w * 0.074, h * 0.062, Math.min(2, w * 0.012)); ctx.fill();
+        ctx.strokeStyle = ol; ctx.lineWidth = lw; ctx.stroke(); ctx.lineWidth = 1;
+        ctx.fillStyle = "#ff7a1a"; // camera-orange tip band
+        ctx.fillRect(x - w * 0.037, Y(0.815), w * 0.074, h * 0.016);
+        ctx.fillStyle = "#e8f4ff"; // lens glint
+        ctx.beginPath(); ctx.arc(x, Y(0.782), Math.max(0.6, w * 0.009), 0, 7); ctx.fill();
       }
     };
     const vis = rivals.filter((r) => r.relS > 1 && r.relS < DRAW_N * SEG_M).sort((a, b) => b.relS - a.relS);
