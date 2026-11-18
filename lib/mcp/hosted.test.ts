@@ -11,7 +11,7 @@ import { POST as mcpPOST, GET as mcpGET } from "@/app/api/mcp/route";
 async function rpc(method: string, params?: unknown, id = 1) {
   const out = await handleMcpBody({ jsonrpc: "2.0", id, method, ...(params !== undefined ? { params } : {}) });
   expect(out).not.toBeNull();
-  return out!.body as { result?: any; error?: { code: number; message: string } };
+  return out!.body as { result?: unknown; error?: { code: number; message: string } };
 }
 async function callTool(name: string, args: Record<string, unknown> = {}) {
   const r = await rpc("tools/call", { name, arguments: args });

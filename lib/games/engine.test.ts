@@ -9,7 +9,7 @@ describe("fairness + ruleset pinning (adopted from the DeepSeek review)", () => 
     expect(rulesetHash("snake")).toMatch(/^[0-9a-f]{64}$/);
   });
   it("snake publishes a seed commitment from frame one but never the seed mid-run", () => {
-    let t = 0;
+    const t = 0;
     const g = new SnakeGame(() => t, 4242);
     const st = g.state();
     expect(st.seedCommit).toBe(createHash("sha256").update("coinop-snake-seed:4242").digest("hex"));
