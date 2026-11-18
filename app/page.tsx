@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { CATALOG, type CatalogGame } from "@/lib/catalog";
+import { arcadeStats } from "@/lib/stats";
 import BoardFeed from "@/components/BoardFeed";
 import NowPlaying from "@/components/NowPlaying";
 import AttractDemo from "@/components/AttractDemo";
@@ -37,9 +38,10 @@ function GameCard({ g }: { g: CatalogGame }) {
   );
 }
 
-export default function Hall() {
+export default async function Hall() {
   const featured = CATALOG.find((g) => g.slug === "thermonuclear")!;
   const rest = CATALOG.filter((g) => g.slug !== "thermonuclear");
+  const stats = await arcadeStats().catch(() => null); // the loop, in numbers (lib/stats)
   return (<main className="px-5">
     {/* Hero */}
     <header className="max-w-6xl mx-auto pt-14 pb-10 text-center">
@@ -182,6 +184,26 @@ export default function Hall() {
                 </div>
               ))}
             </dl>
+            {stats && (
+              <div className="mt-7 max-w-2xl">
+                <p className="eyebrow" style={{ color: "#39ffdc" }}>THE LOOP, IN NUMBERS</p>
+                <dl className="mt-3 grid grid-cols-2 lg:grid-cols-4 gap-3 text-left">
+                  {[
+                    ["$" + stats.usdcTakenIn.toFixed(2), "USDC taken in · " + stats.usdcCoinIns + " plays"],
+                    [stats.qtrPlayRewards.toLocaleString("en-US"), "QTR earned by players"],
+                    [stats.qtrClaimed.toLocaleString("en-US"), "QTR claimed on-chain"],
+                    [stats.scoredPlays.toLocaleString("en-US"), "games scored & verified"],
+                  ].map(([v, l]) => (
+                    <div key={l} className="rounded-xl border border-white/[0.08] bg-black/30 px-4 py-3">
+                      <dt className="sr-only">{l}</dt>
+                      <dd className="num text-base font-bold">{v}</dd>
+                      <dd className="text-xs text-white/50 mt-0.5">{l}</dd>
+                    </div>
+                  ))}
+                </dl>
+                <p className="mt-2 text-xs text-white/40">Counted from the arcade's own ledgers, live — the same figures at <span className="mono">GET /api/stats</span>.</p>
+              </div>
+            )}
             <div className="mt-6 flex flex-wrap items-center gap-3">
               <Link href="/exchange" className="btn-primary">Earn QTR on the Exchange</Link>
               <a href="https://basescan.org/token/0x155dcad05188723216fb5782FFC51689A537611e" target="_blank" rel="noreferrer" className="btn-ghost">View on Basescan <span aria-hidden="true">↗</span></a>

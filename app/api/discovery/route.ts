@@ -70,5 +70,10 @@ export async function GET(req: Request) {
     metadata: { service: "COINOP", program: "verified-record",
       description: "Every wallet's public record, computed only from server-verified scores: best score and all-time rank per cabinet, games played, QTR earned. Human page: /profile/<wallet>.",
       view: base + "/api/agents/record?wallet=<address>", page: base + "/profile/<wallet>" } };
-  return NextResponse.json({ x402Version: 1, items: [...items, ...versus, referral, exchange, prizes, qtrPlay, record, bench] });
+  // Transparency stats: the loop in numbers, from the real ledgers.
+  const stats = { resource: base + "/api/stats", type: "http", x402Version: 1, accepts: [],
+    metadata: { service: "COINOP", program: "transparency-stats",
+      description: "Arcade-wide aggregates computed from the ledgers: settled USDC coin-ins and USDC taken in, QTR emitted via play rewards, QTR paid out in Exchange settlements, QTR claimed on-chain (minted claims), and total scored plays.",
+      view: base + "/api/stats" } };
+  return NextResponse.json({ x402Version: 1, items: [...items, ...versus, referral, exchange, prizes, qtrPlay, record, bench, stats] });
 }
