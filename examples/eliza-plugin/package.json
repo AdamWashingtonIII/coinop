@@ -1,1 +1,65 @@
-{"agentConfig":{"pluginParameters":{"COINOP_CHAIN_ID":{"description":"84532 = Base Sepolia (live today, test USDC). 8453 = Base mainnet (after COINOP's mainnet switch). Defaults to 84532.","required":false,"type":"number"},"COINOP_PRIVATE_KEY":{"description":"Private key of the agent's funded wallet (USDC on Base). Used ONLY to sign x402 payments of exactly 0.25 USDC to the arcade. Keep this a low-balance, play-money wallet.","required":true,"type":"string"},"COINOP_URL":{"description":"COINOP arcade base URL. Defaults to https://coinop-one.vercel.app.","required":false,"type":"string"}},"pluginType":"action"},"dependencies":{"viem":"^2.57.19"},"description":"ElizaOS plugin that lets an agent play COINOP, the pay-per-play arcade for AI agents (0.25 USDC per play over x402 on Base, 25 QTR earned per settled play).","devDependencies":{"@elizaos/core":"^1.0.0","tsup":"^8.3.5","typescript":"^5.7.3"},"exports":{".":{"import":"./dist/index.js","types":"./dist/index.d.ts"}},"files":["dist"],"keywords":["elizaos","eliza","plugin","x402","coinop","arcade","ai-agents","base","usdc"],"main":"dist/index.js","module":"dist/index.js","name":"elizaos-plugin-coinop","peerDependencies":{"@elizaos/core":"^1.0.0"},"scripts":{"build":"tsup","dev":"tsup --watch","typecheck":"tsc --noEmit"},"type":"module","types":"dist/index.d.ts","version":"0.1.0"}
+{
+  "agentConfig": {
+    "pluginParameters": {
+      "COINOP_CHAIN_ID": {
+        "description": "8453 = Base mainnet (default, real USDC). 84532 = Base Sepolia (testnet USDC).",
+        "required": false,
+        "type": "number"
+      },
+      "COINOP_PRIVATE_KEY": {
+        "description": "Private key of the agent's funded wallet (USDC on Base). Used ONLY to sign x402 payments of exactly 0.25 USDC to the arcade (hard cap in the client). Keep this a low-balance, play-money wallet. Optional for the read-only actions.",
+        "required": false,
+        "type": "string"
+      },
+      "COINOP_URL": {
+        "description": "COINOP arcade base URL. Defaults to https://coinop-one.vercel.app.",
+        "required": false,
+        "type": "string"
+      }
+    },
+    "pluginType": "action"
+  },
+  "dependencies": {
+    "viem": "^2.58.0"
+  },
+  "description": "ElizaOS plugin for COINOP, the pay-per-play arcade for AI agents: list cabinets, pay 0.25 USDC per play over x402 on Base and play, read leaderboards, and browse the COINOP Exchange. 25 QTR earned per finished game.",
+  "devDependencies": {
+    "@elizaos/core": "^2.0.5",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "keywords": [
+    "elizaos",
+    "eliza",
+    "plugin",
+    "x402",
+    "coinop",
+    "arcade",
+    "ai-agents",
+    "base",
+    "usdc"
+  ],
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "name": "elizaos-plugin-coinop",
+  "peerDependencies": {
+    "@elizaos/core": "^2.0.0"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "type": "module",
+  "types": "dist/index.d.ts",
+  "version": "0.2.0"
+}

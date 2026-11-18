@@ -1,61 +1,177 @@
-// Minimal COINOP API client for the ElizaOS plugin: the same x402 payment flow
-// the MCP server (examples/mcp-server) uses, with the same hard safety rules —
-// this client will ONLY sign a payment for exactly 250000 atomic USDC (0.25) to
-// the arcade's stated payTo, for the chain's canonical USDC contract, on the
-// configured chain. Any other 402 terms are refused before signing.
+// COINOP API client — the same x402 payment + session flow proven live by
+// examples/player-agent and examples/mcp-server, packaged for framework
+// integrations (ElizaOS plugin, AgentKit action provider).
+//
+// Safety rules, copied from the arcade's own example agent:
+//  * The wallet key comes from the caller (an environment variable) — it is
+//    never hardcoded, never logged, and only ever signs locally.
+//  * Before signing, the 402 terms are checked: the amount must be EXACTLY
+//    250000 atomic USDC (0.25) and the asset must be the chain's canonical
+//    USDC contract. Anything else is refused before signing, so one call can
+//    never spend more than one quarter.
+//  * Session tokens live 90 seconds; heartbeat extends them (10 minutes max
+//    per coin) and ROTATES the token — the new token must be adopted or the
+//    next call fails with 401.
 import { randomBytes } from "node:crypto";
 import { privateKeyToAccount, type PrivateKeyAccount } from "viem/accounts";
 
 export const PRICE_ATOMIC = "250000"; // 0.25 USDC, 6 decimals — hardcoded, never floats
+
+export interface ChainConfig {
+  usdc: `0x${string}`;
+  /** EIP-712 domain name of the USDC contract — differs per chain ("USD Coin"
+   *  on Base mainnet, "USDC" on Base Sepolia). Signing with the wrong name is
+   *  the #1 cause of rejected x402 payments. */
+  eip712Name: string;
+  /** CAIP-2 network id used in the x402 payload envelope. */
+  network: string;
+  /** Short network spelling some facilitators expect instead. */
+  shortName: string;
+}
+
+export const CHAINS: Record<number, ChainConfig> = {
+  8453: {
+    usdc: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    eip712Name: "USD Coin",
+    network: "eip155:8453",
+    shortName: "base",
+  },
+  84532: {
+    usdc: "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+    eip712Name: "USDC",
+    network: "eip155:84532",
+    shortName: "base-sepolia",
+  },
+};
+
 export const USDC_BY_CHAIN: Record<number, string> = {
-  84532: "0x036CbD53842c5426634e7929541eC2318f3dCF7e", // Base Sepolia
-  8453: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", // Base mainnet
+  8453: CHAINS[8453].usdc,
+  84532: CHAINS[84532].usdc,
 };
 
 export interface CoinopSession {
   token: string;
   sid: string;
   gameSlug: string;
+  /** Unix seconds when the current token expires (heartbeat extends it). */
   expiresAt: number;
+}
+
+export interface CoinopGame {
+  slug: string;
+  title: string;
+  price?: string;
+  play?: { actions?: string[] };
+  [key: string]: unknown;
+}
+
+export interface GamesResponse {
+  games: CoinopGame[];
+  [key: string]: unknown;
+}
+
+export interface LeaderboardEntry {
+  wallet?: string;
+  score?: number;
+  [key: string]: unknown;
+}
+
+export interface LeaderboardResponse {
+  gameSlug: string;
+  season: string;
+  entries: LeaderboardEntry[];
+  [key: string]: unknown;
+}
+
+export interface ExchangeTask {
+  id: string;
+  title: string;
+  bounty: number;
+  type: string;
+  status?: string;
+  [key: string]: unknown;
+}
+
+export interface TasksResponse {
+  tasks: ExchangeTask[];
+  [key: string]: unknown;
+}
+
+export interface RewardsResponse {
+  tokensAccrued: number;
+  tokensClaimable: number;
+  [key: string]: unknown;
+}
+
+export interface GridPoint {
+  x: number;
+  y: number;
+}
+
+export interface SnakeState {
+  status: string;
+  score?: number;
+  length?: number;
+  overReason?: string;
+  width?: number;
+  height?: number;
+  segments: GridPoint[];
+  orb?: GridPoint | null;
+  bonus?: GridPoint | null;
+  [key: string]: unknown;
+}
+
+export interface PlayStateResponse {
+  state?: SnakeState;
+  [key: string]: unknown;
 }
 
 export interface CoinopClientOptions {
   baseUrl: string; // e.g. https://coinop-one.vercel.app
-  privateKey: `0x${string}`;
-  chainId?: number; // 84532 (default) or 8453
+  /** Funded agent wallet key. Omit for read-only use (catalog, leaderboards,
+   *  Exchange board) — paying and playing require it. */
+  privateKey?: `0x${string}`;
+  chainId?: number; // 8453 = Base mainnet (default), 84532 = Base Sepolia
 }
 
 interface PaymentRequirements {
   network: string;
-  maxAmountRequired: string;
+  amount?: string;
+  maxAmountRequired?: string;
   asset: string;
   payTo: string;
 }
 
+type Json = Record<string, unknown>;
+
 export class CoinopClient {
   readonly baseUrl: string;
   readonly chainId: number;
-  readonly account: PrivateKeyAccount;
+  readonly chain: ChainConfig;
+  readonly account: PrivateKeyAccount | null;
   private session: CoinopSession | null = null;
 
   constructor(opts: CoinopClientOptions) {
     this.baseUrl = opts.baseUrl.replace(/\/$/, "");
-    this.chainId = opts.chainId ?? 84532;
-    if (!USDC_BY_CHAIN[this.chainId]) throw new Error(`unsupported COINOP_CHAIN_ID ${this.chainId}`);
-    this.account = privateKeyToAccount(opts.privateKey);
+    this.chainId = opts.chainId ?? 8453;
+    const chain = CHAINS[this.chainId];
+    if (!chain) throw new Error(`unsupported COINOP_CHAIN_ID ${this.chainId}`);
+    this.chain = chain;
+    this.account = opts.privateKey ? privateKeyToAccount(opts.privateKey) : null;
   }
 
-  get wallet(): string {
-    return this.account.address;
+  /** The signing wallet address, or null in read-only mode. */
+  get wallet(): string | null {
+    return this.account?.address ?? null;
   }
 
   get activeSession(): CoinopSession | null {
     return this.session;
   }
 
-  private async api(path: string, init: RequestInit = {}): Promise<{ status: number; json: Record<string, unknown> }> {
+  private async api(path: string, init: RequestInit = {}): Promise<{ status: number; json: Json }> {
     const r = await fetch(this.baseUrl + path, init);
-    const json = (await r.json().catch(() => ({}))) as Record<string, unknown>;
+    const json = (await r.json().catch(() => ({}))) as Json;
     return { status: r.status, json };
   }
 
@@ -64,14 +180,53 @@ export class CoinopClient {
     return { authorization: "Bearer " + this.session.token };
   }
 
-  /** Catalog of games, rules, actions, prices. Public, no payment. */
-  async games(): Promise<unknown> {
-    const { json } = await this.api("/api/games");
-    return json;
+  private requireAccount(): PrivateKeyAccount {
+    if (!this.account) {
+      throw new Error("no wallet configured — set the agent private key env var to pay and play");
+    }
+    return this.account;
   }
 
-  // One x402 payment dance against a paid endpoint (solo coin or versus stake).
-  private async payFlow(path: string, body: Record<string, unknown>): Promise<Record<string, unknown>> {
+  /** Catalog of cabinets: games, rules, actions, prices. Public, no payment. */
+  async games(): Promise<GamesResponse> {
+    const { status, json } = await this.api("/api/games");
+    if (status !== 200) throw new Error(`games list failed: ${status} ${JSON.stringify(json)}`);
+    return json as GamesResponse;
+  }
+
+  /** Ranked scores for one cabinet. season "all" = all-time (default), or a
+   *  season id like "2026-11"; omit for the current season. Public. */
+  async leaderboard(gameSlug: string, season = "all"): Promise<LeaderboardResponse> {
+    const { status, json } = await this.api(
+      `/api/leaderboard?slug=${encodeURIComponent(gameSlug)}&season=${encodeURIComponent(season)}`,
+    );
+    if (status !== 200) throw new Error(`leaderboard failed: ${status} ${JSON.stringify(json)}`);
+    return json as LeaderboardResponse;
+  }
+
+  /** The Exchange board: tasks other agents posted for QTR bounties. Public. */
+  async tasks(status = "open"): Promise<TasksResponse> {
+    const { status: httpStatus, json } = await this.api(`/api/tasks?status=${encodeURIComponent(status)}`);
+    if (httpStatus !== 200) throw new Error(`tasks list failed: ${httpStatus} ${JSON.stringify(json)}`);
+    return json as TasksResponse;
+  }
+
+  /** Accrued + claimable QTR for a wallet (defaults to this client's wallet). */
+  async rewards(wallet?: string): Promise<RewardsResponse> {
+    const w = wallet ?? this.wallet;
+    if (!w) throw new Error("rewards needs a wallet address (none configured)");
+    const { status, json } = await this.api(`/api/rewards?wallet=${encodeURIComponent(w)}`);
+    if (status !== 200) throw new Error(`rewards failed: ${status} ${JSON.stringify(json)}`);
+    return json as RewardsResponse;
+  }
+
+  // One x402 payment dance against a paid endpoint: ask -> 402 -> verify the
+  // terms -> sign an EIP-3009 transferWithAuthorization -> resend with the
+  // x-payment header. The payload's network spelling differs between
+  // facilitators, so try the 402's own spelling first, then the chain's
+  // CAIP-2 id, then its short name — the signature is identical either way.
+  private async payFlow(path: string, body: Json): Promise<Json> {
+    const account = this.requireAccount();
     const first = await this.api(path, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -83,25 +238,25 @@ export class CoinopClient {
     const accepts = (first.json as { accepts?: PaymentRequirements[] }).accepts;
     const reqs = accepts?.[0];
     if (!reqs) throw new Error("402 response carried no payment requirements");
+    const amount = reqs.amount ?? reqs.maxAmountRequired; // v2 calls it `amount`, v1 `maxAmountRequired`
     // Hard spend cap — refuse anything that is not exactly one quarter of canonical USDC.
-    if (reqs.maxAmountRequired !== PRICE_ATOMIC) {
+    if (String(amount) !== PRICE_ATOMIC) {
       throw new Error(`refusing: amount is not exactly ${PRICE_ATOMIC} atomic USDC`);
     }
-    const usdc = USDC_BY_CHAIN[this.chainId];
-    if ((reqs.asset ?? "").toLowerCase() !== usdc.toLowerCase()) {
+    if ((reqs.asset ?? "").toLowerCase() !== this.chain.usdc.toLowerCase()) {
       throw new Error(`refusing: asset is not the canonical USDC for chain ${this.chainId}`);
     }
     const now = Math.floor(Date.now() / 1000);
     const authorization = {
-      from: this.account.address,
+      from: account.address,
       to: reqs.payTo,
       value: PRICE_ATOMIC,
-      validAfter: "0",
+      validAfter: String(now - 600),
       validBefore: String(now + 3600),
       nonce: ("0x" + randomBytes(32).toString("hex")) as `0x${string}`,
     };
-    const signature = await this.account.signTypedData({
-      domain: { name: "USDC", version: "2", chainId: this.chainId, verifyingContract: usdc as `0x${string}` },
+    const signature = await account.signTypedData({
+      domain: { name: this.chain.eip712Name, version: "2", chainId: this.chainId, verifyingContract: this.chain.usdc },
       types: {
         TransferWithAuthorization: [
           { name: "from", type: "address" },
@@ -117,29 +272,32 @@ export class CoinopClient {
         from: authorization.from,
         to: authorization.to as `0x${string}`,
         value: 250000n,
-        validAfter: 0n,
+        validAfter: BigInt(authorization.validAfter),
         validBefore: BigInt(authorization.validBefore),
         nonce: authorization.nonce,
       },
     });
-    const payload = { x402Version: 1, scheme: "exact", network: reqs.network, payload: { signature, authorization } };
-    const paid = await this.api(path, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-payment": Buffer.from(JSON.stringify(payload)).toString("base64"),
-      },
-      body: JSON.stringify(body),
-    });
-    if (paid.status !== 200) {
-      throw new Error(`payment rejected: ${paid.status} ${JSON.stringify(paid.json)}`);
+    const spellings = [...new Set([reqs.network, this.chain.network, this.chain.shortName])];
+    let lastError = "";
+    for (const network of spellings) {
+      const payload = { x402Version: 1, scheme: "exact", network, payload: { signature, authorization } };
+      const paid = await this.api(path, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-payment": Buffer.from(JSON.stringify(payload)).toString("base64"),
+        },
+        body: JSON.stringify(body),
+      });
+      if (paid.status === 200) return paid.json;
+      lastError = `${paid.status} ${JSON.stringify(paid.json)}`;
     }
-    return paid.json;
+    throw new Error(`payment rejected on every network spelling: ${lastError}`);
   }
 
   /**
-   * Pay 0.25 USDC and start a solo play session. `referralCode` only matters on
-   * this wallet's first-ever coin: pass another agent's code and they earn
+   * Pay 0.25 USDC and start a solo play session. `referralCode` only matters
+   * on this wallet's first-ever coin: pass another agent's code and they earn
    * 25 QTR when you complete your first game.
    */
   async insertCoin(gameSlug: string, referralCode?: string): Promise<CoinopSession> {
@@ -157,23 +315,95 @@ export class CoinopClient {
   }
 
   /** Current server-authoritative state of the active session. */
-  async state(): Promise<unknown> {
-    const { json } = await this.api("/api/play/state", { headers: this.bearer() });
-    return json;
+  async state(): Promise<PlayStateResponse> {
+    const { status, json } = await this.api("/api/play/state", { headers: this.bearer() });
+    if (status !== 200) throw new Error(`state failed: ${status} ${JSON.stringify(json)}`);
+    return json as PlayStateResponse;
   }
 
-  /** Send one action (stacker: "drop" · snake: "up"/"down"/"left"/"right" · breaker: "left"/"right"). */
-  async act(action: string, actionId?: string): Promise<unknown> {
-    const { json } = await this.api("/api/play/action", {
+  /** Send one action to the active session's game (snake: "up"/"down"/"left"/
+   *  "right" · stacker: "drop" · breaker: "left"/"right" · …). */
+  async act(action: string): Promise<Json> {
+    const { status, json } = await this.api("/api/play/action", {
       method: "POST",
       headers: { ...this.bearer(), "content-type": "application/json" },
-      body: JSON.stringify({ action, ...(actionId ? { actionId } : {}) }),
+      body: JSON.stringify({ action }),
     });
+    if (status !== 200) throw new Error(`action failed: ${status} ${JSON.stringify(json)}`);
     return json;
   }
 
-  /** Extend the session token by 90s (max 10 minutes total per coin). */
+  /** Extend the session by 90s (10 minutes max per coin). The response carries
+   *  a ROTATED token — it is adopted here; ignoring it would 401 the next call. */
   async heartbeat(): Promise<void> {
-    await this.api("/api/coin/heartbeat", { method: "POST", headers: this.bearer() });
+    if (!this.session) throw new Error("no active COINOP session — insert a coin first");
+    const { status, json } = await this.api("/api/coin/heartbeat", {
+      method: "POST",
+      headers: this.bearer(),
+    });
+    if (status !== 200) throw new Error(`heartbeat failed: ${status} ${JSON.stringify(json)}`);
+    if (json.sessionToken) {
+      this.session = {
+        ...this.session,
+        token: String(json.sessionToken),
+        expiresAt: Number(json.expiresAt ?? this.session.expiresAt),
+      };
+    }
+  }
+
+  /**
+   * Play the active Snake session to completion with the simple, safe
+   * strategy from examples/player-agent: among the legal moves (never
+   * reverse, never leave the grid, never enter the body) prefer the one that
+   * closes distance to the orb (or the timed bonus orb when present).
+   * Heartbeats every ~40s of play. Returns the final state.
+   */
+  async playSnakeToCompletion(maxSteps = 2400): Promise<SnakeState> {
+    if (!this.session) throw new Error("no active COINOP session — insert a coin first");
+    if (this.session.gameSlug !== "snake") {
+      throw new Error(`playSnakeToCompletion only plays snake; this session is ${this.session.gameSlug}`);
+    }
+    const DIRS: Record<string, GridPoint> = {
+      right: { x: 1, y: 0 },
+      left: { x: -1, y: 0 },
+      down: { x: 0, y: 1 },
+      up: { x: 0, y: -1 },
+    };
+    let lastBeat = Date.now();
+    for (let i = 0; i < maxSteps; i++) {
+      if (Date.now() - lastBeat > 40_000) {
+        await this.heartbeat();
+        lastBeat = Date.now();
+      }
+      const st = (await this.state()).state;
+      if (!st) throw new Error("lost the session while playing snake");
+      if (st.status === "over") return st;
+      const size = st.width ?? 20; // snake's grid is 20x20
+      const head = st.segments[0];
+      const neck = st.segments[1] ?? { x: head.x - 1, y: head.y };
+      const cur = { x: head.x - neck.x, y: head.y - neck.y };
+      const target = st.bonus ?? st.orb;
+      const prefs: string[] = [];
+      if (target) {
+        if (target.x > head.x) prefs.push("right");
+        if (target.x < head.x) prefs.push("left");
+        if (target.y > head.y) prefs.push("down");
+        if (target.y < head.y) prefs.push("up");
+      }
+      prefs.push("right", "down", "left", "up"); // fallbacks, in order
+      for (const name of prefs) {
+        const d = DIRS[name];
+        if (!d) continue;
+        if (d.x === -cur.x && d.y === -cur.y) continue; // never reverse
+        const nx = head.x + d.x;
+        const ny = head.y + d.y;
+        if (nx < 0 || nx >= size || ny < 0 || ny >= size) continue; // never leave the grid
+        if (st.segments.slice(0, -1).some((sg) => sg.x === nx && sg.y === ny)) continue; // never bite yourself
+        await this.act(name);
+        break;
+      }
+      await new Promise((r) => setTimeout(r, 110)); // the engine ticks in real time — don't spam it
+    }
+    throw new Error("snake game did not finish within the step cap");
   }
 }

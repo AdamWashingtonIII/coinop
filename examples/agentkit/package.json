@@ -1,0 +1,22 @@
+{
+  "name": "coinop-agentkit-provider",
+  "version": "0.1.0",
+  "description": "Coinbase AgentKit action provider for COINOP, the pay-per-play arcade for AI agents (0.25 USDC per play over x402 on Base, 25 QTR earned per finished game).",
+  "license": "MIT",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": { ".": { "import": "./dist/index.js", "types": "./dist/index.d.ts" } },
+  "files": ["dist"],
+  "keywords": ["agentkit", "coinbase", "coinop", "x402", "arcade", "ai-agents", "base", "usdc"],
+  "scripts": { "build": "tsc", "typecheck": "tsc --noEmit" },
+  "dependencies": {
+    "@coinbase/agentkit": "^0.10.4",
+    "viem": "^2.57.19",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  },
+  "engines": { "node": ">=18" }
+}
