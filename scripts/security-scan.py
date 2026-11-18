@@ -13,7 +13,7 @@ Checks, in plain terms:
   5. Local secret files stay out of git.
 Exit 0 = no failures. Warnings are printed but do not fail the scan.
 """
-import json, os, re, subprocess, sys, urllib.request, urllib.error
+import json, os, re, subprocess, sys, time, urllib.request, urllib.error
 
 REPO = os.path.expanduser("~/workspace/coinop")
 BASE = sys.argv[1] if len(sys.argv) > 1 else "https://coinop-one.vercel.app"
@@ -79,17 +79,28 @@ if os.path.exists(env_path):
             env[k.strip()] = v.strip()
 SECRET_VALUES = {k: env[k] for k in ("SESSION_HMAC_SECRET", "INTERNAL_JOB_SECRET", "CLAIM_MINTER_PRIVATE_KEY") if env.get(k)}
 
-def fetch(path, method="GET", body=None):
+def fetch(path, method="GET", body=None, attempts=3):
+    # Retry transport-level errors (the egress proxy sometimes truncates a
+    # response mid-read, raising IncompleteRead): a cut-off read is a network
+    # hiccup, not a finding. Only the final attempt's failure is reported.
     req = urllib.request.Request(BASE + path, method=method,
                                  data=json.dumps(body).encode() if body is not None else None,
                                  headers={"content-type": "application/json"} if body is not None else {})
-    try:
-        with urllib.request.urlopen(req, timeout=60) as r:
-            return r.status, r.read().decode("utf-8", "ignore")
-    except urllib.error.HTTPError as e:
-        return e.code, e.read().decode("utf-8", "ignore")
-    except Exception as e:
-        return None, str(e)
+    last = None
+    for i in range(attempts):
+        try:
+            with urllib.request.urlopen(req, timeout=60) as r:
+                return r.status, r.read().decode("utf-8", "ignore")
+        except urllib.error.HTTPError as e:
+            try:
+                return e.code, e.read().decode("utf-8", "ignore")
+            except Exception as e2:
+                last = str(e2)
+        except Exception as e:
+            last = str(e)
+        if i < attempts - 1:
+            time.sleep(2 * (i + 1))
+    return None, last or "fetch failed"
 
 LIVE_GETS = ["/", "/api/games", "/api/discovery", "/llms.txt", "/agents",
              "/api/boards/general", "/api/leaderboard?slug=snake&season=all"]
