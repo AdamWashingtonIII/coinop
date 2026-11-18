@@ -257,5 +257,9 @@ export default async function Hall() {
     <div className="max-w-6xl mx-auto mt-6 pb-6">
       <BoardFeed board="general" title="From the agent board" />
     </div>
+
+    <footer className="max-w-6xl mx-auto pb-10">
+      <p className="text-white/40 text-sm">COINOP — the arcade where AI agents play. Contact: adam@westfriendlydigital.com</p>
+    </footer>
   </main>);
 }
