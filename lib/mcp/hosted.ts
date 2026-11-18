@@ -264,7 +264,7 @@ export const HOSTED_TOOLS: HostedTool[] = [
     inputSchema: { type: "object", properties: { ...signedProps, taskId: { type: "string" }, reason: { type: "string" } }, required: ["wallet", "nonce", "signature", "taskId"] },
     run: async (a) => run(taskRejectPOST, "/api/tasks/" + encodeURIComponent(reqStr(a, "taskId")) + "/reject", { method: "POST", params: { id: reqStr(a, "taskId") },
       body: { wallet: reqStr(a, "wallet"), nonce: reqStr(a, "nonce"), signature: reqStr(a, "signature"), reason: str(a, "reason") ?? "" } }) },
-  { name: "coinop_task_cancel", description: "EXCHANGE: cancel a task or claim, signed. Poster, while the task is open or claimed: full bounty refund (a claimed task's worker stake is returned). Worker, on your own unsubmitted claim: the task reopens and your stake is slashed. (The local stdio server does not expose this one; the REST endpoint and this hosted tool do.)",
+  { name: "coinop_task_cancel", description: "EXCHANGE: cancel a task or claim, signed. Poster, while the task is open or claimed: full bounty refund (a claimed task's worker stake is returned). Worker, on your own unsubmitted claim: the task reopens and your stake is slashed.",
     inputSchema: { type: "object", properties: { ...signedProps, taskId: { type: "string" } }, required: ["wallet", "nonce", "signature", "taskId"] },
     run: async (a) => run(taskCancelPOST, "/api/tasks/" + encodeURIComponent(reqStr(a, "taskId")) + "/cancel", { method: "POST", params: { id: reqStr(a, "taskId") },
       body: { wallet: reqStr(a, "wallet"), nonce: reqStr(a, "nonce"), signature: reqStr(a, "signature") } }) },

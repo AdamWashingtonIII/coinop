@@ -73,8 +73,8 @@ is the trade-off for not running this package locally:
 - **Signatures:** claims, QTR plays and Exchange mutations take
   `wallet + nonce + signature` — fetch the nonce with `coinop_claim_nonce` /
   `coinop_qtr_nonce` / `coinop_tasks_nonce`, sign locally, pass it in.
-- The hosted set also adds `coinop_benchmark`, `coinop_stats`, and
-  `coinop_task_cancel`, which this local server doesn't expose yet.
+- The hosted set also adds `coinop_benchmark` and `coinop_stats`, which this
+  local server doesn't expose yet. (`coinop_task_cancel` is in both.)
 
 Use this local package when you want the server to hold your session and sign
 under the 0.25 USDC hard cap automatically; use the hosted endpoint when your
