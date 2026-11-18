@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { paymentRequirements, verifyPayment, settlePayment, precheckPayload } from "@/lib/x402/facilitator";
 import { paymentRequiredResponse } from "@/lib/x402/paygate";
 import { createPlaySession, evictSession } from "@/lib/play/store";
-import { accruePlayReward, flagReward } from "@/lib/rewards";
+import { accruePlayRewardPending, flagReward, voidPendingPlayReward } from "@/lib/rewards";
 import { attributeReferral } from "@/lib/referrals";
 import { isLiveEngine } from "@/lib/games/engine";
 import { spendQtrForPlay, QTR_PLAY_PRICE } from "@/lib/qtrplay";
@@ -33,9 +33,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "qtr_" + spend },
         { status: spend === "insufficient" ? 402 : 401 });
     }
-    const reward = await accruePlayReward(wallet, session.sid);
+    const reward = await accruePlayRewardPending(wallet, session.sid); // released when the game records a score
     return NextResponse.json({ sessionToken: token, sid: session.sid, expiresAt, gameSlug, paidWith: "qtr", qtrSpent: QTR_PLAY_PRICE,
-      reward: { tokens: reward.delta, status: "accrued", claim: "/api/rewards" },
+      reward: { tokens: reward.delta, status: "pending_score", claim: "/api/rewards" },
       play: { state: "/api/play/state", action: "/api/play/action", heartbeat: "/api/coin/heartbeat" } });
   }
   // The paywall answers BEFORE body validation: an unpaid request (including
@@ -64,7 +64,7 @@ export async function POST(req: Request) {
   }
   const payer = verdict.payer ?? (payload as { payload?: { authorization?: { from?: string } } }).payload?.authorization?.from ?? "unknown";
   const { session, token, expiresAt } = await createPlaySession(gameSlug, payer);
-  const reward = await accruePlayReward(payer, session.sid); // ADR 0004: +25 tokens per paid play
+  const reward = await accruePlayRewardPending(payer, session.sid); // ADR 0004: +25 per play, released when the game records a score
   await rakeAccrue(session.sid); // ADR 0016: $0.05 of the quarter feeds the weekly prize pool
   // Referrals (ADR 0010): a verified first coin-in carrying someone's code
   // attributes this payer to that referrer. Invalid / self / late codes are
@@ -79,11 +79,11 @@ export async function POST(req: Request) {
   // Async settle — never block play on confirmation latency.
   void settlePayment(payload, reqs).then(async (s) => {
     session.paymentStatus = s.success ? "settled" : "needs_reconcile";
-    if (!s.success) { await flagReward(session.sid); await rakeReverse(session.sid); } // tokens and rake don't stand on an unpaid play
+    if (!s.success) { await flagReward(session.sid); await voidPendingPlayReward(session.sid); await rakeReverse(session.sid); } // tokens and rake don't stand on an unpaid play
     if (s.tx) session.tx = s.tx;
-  }).catch(async () => { session.paymentStatus = "needs_reconcile"; await flagReward(session.sid); await rakeReverse(session.sid); });
+  }).catch(async () => { session.paymentStatus = "needs_reconcile"; await flagReward(session.sid); await voidPendingPlayReward(session.sid); await rakeReverse(session.sid); });
   return NextResponse.json({ sessionToken: token, sid: session.sid, expiresAt, gameSlug,
-    reward: { tokens: reward.delta, status: "accrued", claim: "/api/rewards" },
+    reward: { tokens: reward.delta, status: "pending_score", claim: "/api/rewards" },
     ...(referral ? { referral } : {}),
     play: { state: "/api/play/state", action: "/api/play/action", heartbeat: "/api/coin/heartbeat" } });
 }

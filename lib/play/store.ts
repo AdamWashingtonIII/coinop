@@ -140,6 +140,16 @@ export async function recordResult(s: PlaySession): Promise<void> {
       await onMatchSessionRecorded(s.matchId);
     } catch { /* settlement is also driven lazily by match reads; never fail the record */ }
   }
+  // Farming hardening: a recorded score is what earns the play reward. The
+  // coin-in accrued it pending; release it now (reason-guarded in the ledger,
+  // so re-entry pays nothing twice). Match sessions never accrue the solo
+  // reward — their QTR comes from settlement (ADR 0009) — so skip them.
+  if (s.recorded && !s.matchId) {
+    try {
+      const { releasePlayReward } = await import("@/lib/rewards");
+      await releasePlayReward(s.sid);
+    } catch { /* a failed release is retried by the next record path; never fail the record */ }
+  }
   // Referrals (ADR 0010): a recorded result may be a referred wallet's first —
   // qualify the referral and pay the referrer. recordResult only reaches here
   // with a durable scores row written, which is exactly the qualification
