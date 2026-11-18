@@ -51,6 +51,16 @@ for path in walk_files(["app", "lib", "components", "db", "public", "scripts", "
                 fails.append(f"secret pattern '{label}' at {os.path.relpath(path, REPO)}:{i}")
 
 # --- 2) personal info on the public surface --------------------------------
+# The one designated public contact for the project: Adam approved this exact
+# address as the official project email on the Basescan token filing
+# (Nov 18, 2026) and it is published in the site footer for that purpose.
+# Occurrences of this exact string are scrubbed before the checks below;
+# every pattern still applies to everything else, including any other use
+# of the same first name anywhere else.
+PUBLIC_CONTACT = "adam@westfriendlydigital.com"
+def scrub_public_contact(text):
+    return text.replace(PUBLIC_CONTACT, "")
+
 PERSONAL = [
     ("operator first name", re.compile(r"\badam\b", re.I)),
     ("operator surname", re.compile(r"washington", re.I)),
@@ -62,7 +72,7 @@ PERSONAL = [
 for path in walk_files(["app", "lib", "components", "public"], (".ts", ".tsx", ".json", ".html", ".txt")):
     if ".test." in path:
         continue  # tests are not deployed
-    text = open(path, errors="ignore").read()
+    text = scrub_public_contact(open(path, errors="ignore").read())
     for label, pat in PERSONAL:
         m = pat.search(text)
         if m:
@@ -112,8 +122,9 @@ for p in LIVE_GETS:
     for name, value in SECRET_VALUES.items():
         if value and value in body:
             fails.append(f"SECRET LEAK: {name} value appears in live response {p}")
+    pbody = scrub_public_contact(body)
     for label, pat in PERSONAL:
-        if pat.search(body):
+        if pat.search(pbody):
             fails.append(f"personal info '{label}' in live response {p}")
 
 # --- 4) locked doors --------------------------------------------------------
