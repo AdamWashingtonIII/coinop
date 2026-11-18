@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "crypto";
 import { and, eq, sql } from "drizzle-orm";
 import { createEngine, createEngineWithClock, rulesetHash, type Engine, type AnyState } from "@/lib/games/engine";
-import { newSid, signSession, type SessionClaims } from "@/lib/sessions";
+import { newSid, signSession, HEARTBEAT_MAX_SECONDS, type SessionClaims } from "@/lib/sessions";
 import { getDb, schema } from "@/lib/db";
 // Play sessions. Live engine state stays in memory (tick-level play), but the
 // durable record is Postgres (M2'): a sessions row at coin-in, and at game over a
@@ -114,6 +114,12 @@ export function cacheActionResponse(sid: string, actionId: string, response: unk
 // Write the verified score + replay exactly once, when a run ends.
 export async function recordResult(s: PlaySession): Promise<void> {
   if (s.recorded || !s.game.isOver) return;
+  await writeResult(s, false);
+}
+// The shared write behind recordResult and the cap finalizer: score row +
+// replay record + session end, then the reward/referral hooks. `capped` marks
+// a run the 10-minute cap ended mid-game (ADR 0023) in its replay payload.
+async function writeResult(s: PlaySession, capped: boolean): Promise<void> {
   s.recorded = true;
   actionCache.delete(s.sid);
   try {
@@ -129,6 +135,7 @@ export async function recordResult(s: PlaySession): Promise<void> {
     await db.insert(schema.gameEvents).values({ id: randomBytes(12).toString("hex"), sessionId: s.sid, type: "replay",
       payload: JSON.stringify({ slug: s.gameSlug, wallet: s.wallet, finalScore: s.game.finalScore,
         endedAt: Date.now(), actions, snapshots, rulesetHash: rHash, transcriptHash,
+        ...(capped ? { capped: true } : {}),
         ...(s.game.seedCommitment ? { seedCommit: s.game.seedCommitment } : {}),
         ...(s.game.revealSeed ? { seed: s.game.revealSeed() } : {}) }) });
     await db.update(schema.sessions).set({ endedAt: new Date() }).where(eq(schema.sessions.sid, s.sid));
@@ -160,6 +167,37 @@ export async function recordResult(s: PlaySession): Promise<void> {
       await onReferredFirstResult(s.wallet);
     } catch { /* qualification is retried by the next recorded result; never fail the record */ }
   }
+}
+// Cap finalization (ADR 0023): a solo run that reaches the 10-minute session
+// cap without ending used to record nothing — no score, and its score-gated
+// play reward stayed pending forever. Finalize it at the cap instead: a run
+// with real play records the score it had when time ran out (flagged capped
+// in its replay) and releases its reward like any recorded result; a run
+// with zero actions records no score and its pending reward is voided — a
+// coin that bought no game earns nothing. Match sessions are excluded:
+// versus runs settle or forfeit through match settlement (ADR 0009).
+// Returns what happened, or null when the session is not the cap's business.
+export async function finalizeCappedSession(s: PlaySession): Promise<"recorded" | "capped" | "voided" | null> {
+  if (s.recorded || s.matchId) return null;
+  if (Date.now() - s.createdAt <= HEARTBEAT_MAX_SECONDS * 1000) return null;
+  if (s.game.isOver) { await recordResult(s); return s.recorded ? "recorded" : null; }
+  if (s.game.actionLog().length === 0) {
+    s.recorded = true; // closed: nothing may record or release for it later
+    try {
+      const db = await getDb();
+      await db.update(schema.sessions).set({ endedAt: new Date() }).where(eq(schema.sessions.sid, s.sid));
+    } catch { /* best-effort: the void below is the money-critical part */ }
+    try {
+      const { voidPendingPlayReward } = await import("@/lib/rewards");
+      await voidPendingPlayReward(s.sid);
+    } catch { /* the ledger guard keeps a later void attempt safe */ }
+    evictSession(s.sid);
+    return "voided";
+  }
+  await writeResult(s, true);
+  if (!s.recorded) return null; // the write failed; a later touch retries
+  evictSession(s.sid);
+  return "capped";
 }
 export async function bestScore(wallet: string, gameSlug: string): Promise<number> {
   let best = 0;

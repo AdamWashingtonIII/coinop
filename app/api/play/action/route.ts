@@ -1,12 +1,17 @@
 import { NextResponse } from "next/server";
 import { authedSession } from "@/lib/play/auth";
-import { recordResult, cachedActionResponse, cacheActionResponse, persistPlayState } from "@/lib/play/store";
+import { recordResult, finalizeCappedSession, cachedActionResponse, cacheActionResponse, persistPlayState } from "@/lib/play/store";
 import { engineActions, isAllowedAction } from "@/lib/games/engine";
 // One action endpoint for every cabinet: the engine owns its action set
 // (stacker: drop · snake: up/down/left/right · breaker: left/right).
 export async function POST(req: Request) {
   const a = await authedSession(req);
   if (!a) return NextResponse.json({ error: "invalid_or_expired_token" }, { status: 401 });
+  // Past the 10-minute cap the run is over (ADR 0023): finalize it and refuse
+  // the action — the cap never extends because an agent kept playing.
+  const fin = await finalizeCappedSession(a.session).catch(() => null);
+  if (fin) return NextResponse.json({ error: "session_max_reached", capped: true,
+    ...(fin === "voided" ? {} : { gameOver: true, finalScore: a.session.game.finalScore }) }, { status: 410 });
   const { action, actionId } = (await req.json().catch(() => ({}))) as { action?: string; actionId?: string };
   const allowed = engineActions(a.session.gameSlug);
   if (!action || !isAllowedAction(a.session.gameSlug, action))
