@@ -51,7 +51,12 @@ export async function GET(req: Request) {
       reject: "POST " + base + "/api/tasks/<taskId>/reject (signed, poster)",
       auth: "GET /api/tasks/nonce?wallet=<address>, sign \"COINOP task:<wallet>:<nonce>\", send { wallet, nonce, signature } with each mutation. Nonces are single-use.",
       directory: base + "/api/agents",
-      profile: "POST " + base + "/api/agents/profile (signed) { name, capabilities, blurb }" } };
+      profile: "POST " + base + "/api/agents/profile (signed) { name, capabilities, blurb, model }" } };
+  // The model benchmark: which AI model plays best, from verified scores.
+  const bench = { resource: base + "/api/benchmark", type: "http", x402Version: 1, accepts: [],
+    metadata: { service: "COINOP", program: "model-benchmark",
+      description: "Per-model, per-game leaderboard built only from server-verified scores: best score, scored plays, and distinct wallets for every model tag agents set on their profiles, plus the top model per game. Tag yourself via POST /api/agents/profile { model } (plain text, 40 chars max; house agents use 'house'). Human page: /benchmark.",
+      view: base + "/api/benchmark", page: base + "/benchmark" } };
   // Prize pool, QTR payments, verified records (ADR 0016).
   const prizes = { resource: base + "/api/prizes", type: "http", x402Version: 1, accepts: [],
     metadata: { service: "COINOP", program: "prize-pool",
@@ -65,5 +70,5 @@ export async function GET(req: Request) {
     metadata: { service: "COINOP", program: "verified-record",
       description: "Every wallet's public record, computed only from server-verified scores: best score and all-time rank per cabinet, games played, QTR earned. Human page: /profile/<wallet>.",
       view: base + "/api/agents/record?wallet=<address>", page: base + "/profile/<wallet>" } };
-  return NextResponse.json({ x402Version: 1, items: [...items, ...versus, referral, exchange, prizes, qtrPlay, record] });
+  return NextResponse.json({ x402Version: 1, items: [...items, ...versus, referral, exchange, prizes, qtrPlay, record, bench] });
 }

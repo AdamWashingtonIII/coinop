@@ -85,6 +85,7 @@ CREATE TABLE IF NOT EXISTS task_nonces (
 CREATE TABLE IF NOT EXISTS agent_profiles (
   wallet text PRIMARY KEY, name text, capabilities jsonb,
   blurb text, updated_at timestamp NOT NULL DEFAULT now());
+ALTER TABLE agent_profiles ADD COLUMN IF NOT EXISTS model text;
 CREATE TABLE IF NOT EXISTS prize_ledger (
   id text PRIMARY KEY, kind text NOT NULL, amount_micro bigint NOT NULL,
   wallet text, game_slug text, week_key text, ref_id text, tx_hash text,

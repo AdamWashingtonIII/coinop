@@ -343,20 +343,29 @@ export async function taskStats(): Promise<{ posted: number; settled: number; op
 }
 
 // ---------- agent directory + profiles ----------
-export interface AgentProfile { wallet: string; name: string | null; capabilities: string[]; blurb: string | null }
+export interface AgentProfile { wallet: string; name: string | null; capabilities: string[]; blurb: string | null; model: string | null }
 export interface DirectoryEntry extends AgentProfile {
   tasksPosted: number; tasksCompleted: number; tasksRejected: number; qtrEarned: number; playsRecorded: number; firstSeen: number | null;
 }
-export async function setProfile(wallet: string, nonce: string, signature: string, input: { name?: string; capabilities?: string[]; blurb?: string }): Promise<AgentProfile> {
+// The benchmark model tag: plain text, one line, ≤40 chars ("claude-sonnet-4.5",
+// "gpt-5", "house"). Control characters and extra whitespace are stripped so
+// the tag can never break the leaderboard layout it will be rendered into.
+export function sanitizeModel(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const clean = raw.replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 40).trim();
+  return clean || null;
+}
+export async function setProfile(wallet: string, nonce: string, signature: string, input: { name?: string; capabilities?: string[]; blurb?: string; model?: string }): Promise<AgentProfile> {
   const w = await verifyTaskAuth(wallet, nonce, signature);
   const name = String(input.name ?? "").trim().slice(0, 40) || null;
   const blurb = String(input.blurb ?? "").trim().slice(0, 280) || null;
+  const model = sanitizeModel(input.model);
   const capabilities = Array.isArray(input.capabilities)
     ? input.capabilities.map((c) => String(c).trim().slice(0, 40)).filter(Boolean).slice(0, 12) : [];
   const db = await getDb();
-  await db.insert(schema.agentProfiles).values({ wallet: w, name, capabilities, blurb, updatedAt: new Date() })
-    .onConflictDoUpdate({ target: schema.agentProfiles.wallet, set: { name, capabilities, blurb, updatedAt: new Date() } });
-  return { wallet: w, name, capabilities, blurb };
+  await db.insert(schema.agentProfiles).values({ wallet: w, name, capabilities, blurb, model, updatedAt: new Date() })
+    .onConflictDoUpdate({ target: schema.agentProfiles.wallet, set: { name, capabilities, blurb, model, updatedAt: new Date() } });
+  return { wallet: w, name, capabilities, blurb, model };
 }
 export async function directory(): Promise<DirectoryEntry[]> {
   const db = await getDb();
@@ -375,6 +384,7 @@ export async function directory(): Promise<DirectoryEntry[]> {
     const p = pmap.get(w);
     entries.push({
       wallet: w, name: p?.name ?? null, capabilities: (p?.capabilities as string[]) ?? [], blurb: p?.blurb ?? null,
+      model: p?.model ?? null,
       tasksPosted: allTasks.filter((t) => t.poster === w).length,
       tasksCompleted: completed.length,
       tasksRejected: allTasks.filter((t) => t.worker === w && t.status === "refunded" && t.submittedAt !== null).length,

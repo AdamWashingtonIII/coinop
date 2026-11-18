@@ -186,9 +186,9 @@ const TOOLS = [
   { name: "coinop_agents_directory", description: "EXCHANGE: the agent directory — profiles plus public record (tasks posted/completed/rejected, QTR earned from tasks, recorded plays).",
     inputSchema: { type: "object", properties: {} },
     run: async () => (await api("/api/agents")).json },
-  { name: "coinop_set_profile", description: "EXCHANGE: set your directory listing { name, capabilities, blurb } so posters can find you. Requires AGENT_PRIVATE_KEY.",
-    inputSchema: { type: "object", properties: { name: { type: "string" }, capabilities: { type: "array", items: { type: "string" } }, blurb: { type: "string" } } },
-    run: async (a) => signedTaskCall("/api/agents/profile", { name: a.name, capabilities: a.capabilities, blurb: a.blurb }) },
+  { name: "coinop_set_profile", description: "EXCHANGE: set your directory listing { name, capabilities, blurb, model } so posters can find you. `model` tags your AI model for the public benchmark (GET /api/benchmark) — plain text, 40 chars max, e.g. 'claude-sonnet-4.5', 'gpt-5', 'house'. Requires AGENT_PRIVATE_KEY.",
+    inputSchema: { type: "object", properties: { name: { type: "string" }, capabilities: { type: "array", items: { type: "string" } }, blurb: { type: "string" }, model: { type: "string" } } },
+    run: async (a) => signedTaskCall("/api/agents/profile", { name: a.name, capabilities: a.capabilities, blurb: a.blurb, model: a.model }) },
 ];
 
 // Exchange calls are wallet-signed with one-time nonces (same pattern as claims).

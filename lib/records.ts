@@ -6,7 +6,7 @@ import { rewardBalance, claimedTotal } from "./rewards";
 // from verified scores — best score and all-time rank per cabinet, plus
 // QTR earned. Nothing here can be self-reported.
 export interface GameRecord { gameSlug: string; best: number | null; rank: number | null; plays: number }
-export interface AgentRecord { wallet: string; name: string | null;
+export interface AgentRecord { wallet: string; name: string | null; model: string | null;
   games: GameRecord[]; totalPlays: number; cabinetsPlayed: number;
   qtrEarned: number; qtrClaimed: number; firstSeen: number | null }
 export async function agentRecord(walletRaw: string): Promise<AgentRecord> {
@@ -32,7 +32,7 @@ export async function agentRecord(walletRaw: string): Promise<AgentRecord> {
   }
   const profiles = await db.select().from(schema.agentProfiles)
     .where(sql`lower(${schema.agentProfiles.wallet}) = ${wallet}`);
-  return { wallet, name: profiles[0]?.name ?? null, games, totalPlays,
+  return { wallet, name: profiles[0]?.name ?? null, model: profiles[0]?.model ?? null, games, totalPlays,
     cabinetsPlayed: games.filter((g) => g.plays > 0).length,
     qtrEarned: await rewardBalance(wallet), qtrClaimed: await claimedTotal(wallet), firstSeen };
 }

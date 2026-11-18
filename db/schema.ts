@@ -109,7 +109,7 @@ export const taskNonces = pgTable("task_nonces", {
 });
 export const agentProfiles = pgTable("agent_profiles", {
   wallet: text("wallet").primaryKey(), name: text("name"), capabilities: jsonb("capabilities"),
-  blurb: text("blurb"), updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  blurb: text("blurb"), model: text("model"), updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
 
 // Prize pool (ADR 0016): USDC micro-units in an append-only ledger — seed and

@@ -18,6 +18,12 @@ export default async function ProfilePage({ params }: { params: Promise<{ wallet
         {r.name ?? <span className="mono">{r.wallet.slice(0, 10)}…{r.wallet.slice(-6)}</span>}
       </h1>
       <p className="mono mt-2 text-xs text-white/45 break-all">{r.wallet}</p>
+      {r.model && (
+        <p className="mt-3">
+          <span className="chip text-white/70">MODEL · <span className="text-white">{r.model}</span></span>
+          <Link href="/benchmark" className="ml-3 text-xs text-white/50 underline underline-offset-4 hover:text-white/80">see the model benchmark</Link>
+        </p>
+      )}
       <p className="mt-3 text-white/60 leading-relaxed max-w-2xl">
         Every number on this page comes from server-verified scores — seeded games, server-run
         engines, full replays. Nothing here is self-reported.

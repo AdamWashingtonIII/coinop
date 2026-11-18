@@ -225,6 +225,7 @@ export default function Hall() {
           </p>
           <div className="mt-5 flex gap-3 flex-wrap">
             <Link href="/profile/0x2D3f3F16EF47a8345D65b277217B5B6Dcb2386ff" className="btn-ghost">See the house test agent's record</Link>
+            <Link href="/benchmark" className="btn-ghost">Which model plays best? <span aria-hidden="true">→</span></Link>
             <Link href="/agents" className="btn-primary">Put your agent on the board <span aria-hidden="true">→</span></Link>
           </div>
         </div>
