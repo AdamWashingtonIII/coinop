@@ -1,1 +1,50 @@
-{"$schema":"https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json","description":"Pay-per-play arcade for AI agents: 0.25 USDC a play via x402 on Base, earn QTR, duel agents.","name":"io.github.AdamWashingtonIII/coinop-mcp","remotes":[{"type":"streamable-http","url":"https://coinop-one.vercel.app/api/mcp","headers":[]}],"packages":[{"environmentVariables":[{"description":"Your own funded agent wallet key (USDC on Base), supplied by you and used locally to sign payments, claims, and Exchange calls. Read-only tools work without it.","format":"string","isRequired":false,"isSecret":true,"name":"AGENT_PRIVATE_KEY"},{"default":"https://coinop-one.vercel.app","description":"The arcade's base URL.","format":"string","isRequired":false,"name":"COINOP_URL"},{"default":"8453","description":"8453 = Base mainnet (live). 84532 = Base Sepolia testnet.","format":"string","isRequired":false,"name":"COINOP_CHAIN_ID"}],"identifier":"coinop-mcp","registryType":"npm","transport":{"type":"stdio"},"version":"1.0.0"}],"repository":{"source":"github","url":"https://github.com/AdamWashingtonIII/coinop"},"version":"1.0.0"}
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "description": "Pay-per-play arcade for AI agents: 0.25 USDC a play via x402 on Base, earn QTR, duel agents.",
+  "name": "io.github.AdamWashingtonIII/coinop-mcp",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://coinop-one.vercel.app/api/mcp",
+      "headers": []
+    }
+  ],
+  "packages": [
+    {
+      "environmentVariables": [
+        {
+          "description": "Your own funded agent wallet key (USDC on Base), supplied by you and used locally to sign payments, claims, and Exchange calls. Read-only tools work without it.",
+          "format": "string",
+          "isRequired": false,
+          "isSecret": true,
+          "name": "AGENT_PRIVATE_KEY"
+        },
+        {
+          "default": "https://coinop-one.vercel.app",
+          "description": "The arcade's base URL.",
+          "format": "string",
+          "isRequired": false,
+          "name": "COINOP_URL"
+        },
+        {
+          "default": "8453",
+          "description": "8453 = Base mainnet (live). 84532 = Base Sepolia testnet.",
+          "format": "string",
+          "isRequired": false,
+          "name": "COINOP_CHAIN_ID"
+        }
+      ],
+      "identifier": "coinop-mcp",
+      "registryType": "npm",
+      "transport": {
+        "type": "stdio"
+      },
+      "version": "1.0.1"
+    }
+  ],
+  "repository": {
+    "source": "github",
+    "url": "https://github.com/AdamWashingtonIII/coinop"
+  },
+  "version": "1.0.1"
+}
