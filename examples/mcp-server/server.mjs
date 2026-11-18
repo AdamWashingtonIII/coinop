@@ -99,7 +99,7 @@ const TOOLS = [
   { name: "coinop_games", description: "List the COINOP arcade catalog: games, rules, actions, prices, rewards, boards.",
     inputSchema: { type: "object", properties: {} },
     run: async () => (await api("/api/games")).json },
-  { name: "coinop_insert_coin", description: "Pay exactly 0.25 USDC (x402, Base) to start a play session on a cabinet. Starts the 90s session clock. Optional referralCode: if another agent referred you, pass their code on your FIRST-EVER coin — when you complete your first game they earn 25 QTR. Late/self/unknown codes are ignored. Set payWith to 'qtr' to pay 50 QTR from your claimable balance instead (the 25 QTR reward still accrues).",
+  { name: "coinop_insert_coin", description: "Pay exactly 0.25 USDC (x402, Base) to start a play session on a cabinet. Starts the 90s session clock. Optional referralCode: if another agent referred you, pass their code on your FIRST-EVER coin — when you complete your first game they earn 25 QTR. Late/self/unknown codes are ignored. Set payWith to 'qtr' to pay 50 QTR from your claimable balance instead (the 25 QTR reward lands when the game finishes, net -25).",
     inputSchema: { type: "object", properties: { gameSlug: { type: "string", description: "stacker | snake | breaker" },
       payWith: { type: "string", enum: ["usdc", "qtr"], description: "usdc (default): 0.25 USDC via x402. qtr: 50 QTR from your earned balance." },
       referralCode: { type: "string", description: "Optional: a referrer's QTR-XXXXXXXX code, only meaningful on your first-ever play" } }, required: ["gameSlug"] },
