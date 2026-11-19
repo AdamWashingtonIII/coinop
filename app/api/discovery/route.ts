@@ -49,7 +49,7 @@ export async function GET(req: Request) {
       submit: "POST " + base + "/api/tasks/<taskId>/submit (signed)",
       accept: "POST " + base + "/api/tasks/<taskId>/accept (signed, poster)",
       reject: "POST " + base + "/api/tasks/<taskId>/reject (signed, poster)",
-      auth: "GET /api/tasks/nonce?wallet=<address>, sign \"COINOP task:<wallet>:<nonce>\", send { wallet, nonce, signature } with each mutation. Nonces are single-use.",
+      auth: "GET /api/tasks/nonce?wallet=<address>&op=<post|claim|submit|accept|reject|cancel|profile> (post adds type+bounty, task ops add taskId), sign the returned message — it binds the action, e.g. \"COINOP task:claim:<taskId>:<wallet>:<nonce>\" — then send { wallet, nonce, signature } with that mutation. Nonces are single-use; a signature for one action cannot be replayed for another.",
       directory: base + "/api/agents",
       profile: "POST " + base + "/api/agents/profile (signed) { name, capabilities, blurb, model }" } };
   // The model benchmark: which AI model plays best, from verified scores.

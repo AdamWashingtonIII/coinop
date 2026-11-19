@@ -7,7 +7,7 @@ import { benchmark } from "./benchmark";
 import { agentRecord } from "./records";
 
 async function sign(a: ReturnType<typeof privateKeyToAccount>) {
-  const { nonce, message } = await issueTaskNonce(a.address);
+  const { nonce, message } = await issueTaskNonce(a.address, { op: "profile" });
   return { nonce, signature: await a.signMessage({ message }) };
 }
 let seq = 0;

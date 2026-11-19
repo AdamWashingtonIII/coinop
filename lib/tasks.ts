@@ -8,7 +8,23 @@ import { isLiveEngine } from "./games/engine";
 // QTR bounty in the rewards ledger; workers claim, submit, and are paid on
 // acceptance (custom tasks) or on server verification (arcade_score tasks).
 // Every mutation is wallet-signed with a one-time nonce, mirroring claims.
-export const TASK_MESSAGE = (wallet: string, nonce: string) => `COINOP task:${wallet.toLowerCase()}:${nonce}`;
+// ADR 0024: the signed message binds the INTENT — the operation and its
+// economic terms (task id, or type+bounty for a post) — not just the wallet.
+// A signature an agent is talked into giving for one action cannot be
+// replayed for a different action, because each mutation re-derives the
+// expected message from the operation it is actually performing.
+export type TaskIntent =
+  | { op: "post"; type: TaskType; bounty: number }
+  | { op: "claim" | "submit" | "accept" | "reject" | "cancel"; taskId: string }
+  | { op: "profile" };
+export const TASK_MESSAGE = (wallet: string, nonce: string, intent: TaskIntent) => {
+  const w = wallet.toLowerCase();
+  switch (intent.op) {
+    case "post": return `COINOP task:post:${intent.type}:${intent.bounty}:${w}:${nonce}`;
+    case "profile": return `COINOP task:profile:${w}:${nonce}`;
+    default: return `COINOP task:${intent.op}:${intent.taskId}:${w}:${nonce}`;
+  }
+};
 const WALLET_RE = /^0x[0-9a-fA-F]{40}$/;
 const id = () => randomBytes(12).toString("hex");
 export const FEE_RATE = 0.10;
@@ -62,26 +78,44 @@ async function slashStake(r: Row): Promise<void> {
   if (r.worker && s > 0 && t) await taskLedger(t, s, "task_stake_slash", r.id);
 }
 
-// ---------- wallet-signature auth (one-time nonces, same shape as claims) ----------
-export async function issueTaskNonce(wallet: string): Promise<{ nonce: string; message: string; expiresAt: number }> {
+// ---------- wallet-signature auth (one-time nonces, intent-bound, ADR 0024) ----------
+const TASK_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+export function checkIntent(intent: TaskIntent): TaskIntent {
+  if (!intent || typeof intent !== "object") throw new Error("bad_intent");
+  if (intent.op === "post") {
+    if (intent.type !== "arcade_score" && intent.type !== "custom") throw new Error("bad_intent");
+    const bounty = Math.floor(Number(intent.bounty));
+    if (!Number.isFinite(bounty) || bounty < MIN_BOUNTY || bounty > MAX_BOUNTY) throw new Error("bad_intent");
+    return { op: "post", type: intent.type, bounty };
+  }
+  if (intent.op === "profile") return { op: "profile" };
+  if (intent.op === "claim" || intent.op === "submit" || intent.op === "accept" || intent.op === "reject" || intent.op === "cancel") {
+    if (!TASK_ID_RE.test(String(intent.taskId ?? ""))) throw new Error("bad_intent");
+    return { op: intent.op, taskId: String(intent.taskId) };
+  }
+  throw new Error("bad_intent");
+}
+export async function issueTaskNonce(wallet: string, intent: TaskIntent): Promise<{ nonce: string; message: string; expiresAt: number }> {
   if (!WALLET_RE.test(wallet)) throw new Error("bad_wallet");
+  const checked = checkIntent(intent);
   const db = await getDb();
   const w = wallet.toLowerCase();
   await db.delete(schema.taskNonces).where(lt(schema.taskNonces.exp, new Date()));
   const nonce = randomBytes(16).toString("hex");
   const exp = new Date(Date.now() + 5 * 60_000);
   await db.insert(schema.taskNonces).values({ nonce, wallet: w, exp });
-  return { nonce, message: TASK_MESSAGE(w, nonce), expiresAt: exp.getTime() };
+  return { nonce, message: TASK_MESSAGE(w, nonce, checked), expiresAt: exp.getTime() };
 }
-async function verifyTaskAuth(wallet: string, nonce: string, signature: string): Promise<string> {
+async function verifyTaskAuth(wallet: string, nonce: string, signature: string, intent: TaskIntent): Promise<string> {
   if (!WALLET_RE.test(wallet)) throw new Error("bad_wallet");
+  const checked = checkIntent(intent);
   const db = await getDb();
   const w = wallet.toLowerCase();
   const rows = await db.select().from(schema.taskNonces).where(eq(schema.taskNonces.nonce, nonce)).limit(1);
   const row = rows[0];
   if (!row || row.wallet !== w) throw new Error("bad_nonce");
   if (row.exp.getTime() < Date.now()) { await db.delete(schema.taskNonces).where(eq(schema.taskNonces.nonce, nonce)); throw new Error("nonce_expired"); }
-  const ok = await verifyMessage({ address: wallet as Address, message: TASK_MESSAGE(w, nonce), signature: signature as `0x${string}` }).catch(() => false);
+  const ok = await verifyMessage({ address: wallet as Address, message: TASK_MESSAGE(w, nonce, checked), signature: signature as `0x${string}` }).catch(() => false);
   if (!ok) throw new Error("bad_signature");
   await db.delete(schema.taskNonces).where(eq(schema.taskNonces.nonce, nonce)); // single-use
   return w;
@@ -142,14 +176,16 @@ async function payOut(r: Row): Promise<void> {
 // ---------- mutations ----------
 export interface PostInput { type: TaskType; title: string; description: string; bounty: number; deadlineHours: number; spec?: Record<string, unknown>; deliverable?: string; acceptance?: string }
 export async function postTask(wallet: string, nonce: string, signature: string, input: PostInput): Promise<Task> {
-  const w = await verifyTaskAuth(wallet, nonce, signature);
+  // Type + bounty are validated before auth because the signature binds
+  // them (ADR 0024): the wallet signed exactly this type and bounty.
+  if (input.type !== "arcade_score" && input.type !== "custom") throw new Error("bad_type");
+  const bounty = Math.floor(Number(input.bounty));
+  if (!Number.isFinite(bounty) || bounty < MIN_BOUNTY || bounty > MAX_BOUNTY) throw new Error("bad_bounty");
+  const w = await verifyTaskAuth(wallet, nonce, signature, { op: "post", type: input.type, bounty });
   await settleExpired();
   const title = String(input.title ?? "").trim().slice(0, 120);
   const description = String(input.description ?? "").trim().slice(0, 2000);
   if (!title || !description) throw new Error("missing_fields");
-  if (input.type !== "arcade_score" && input.type !== "custom") throw new Error("bad_type");
-  const bounty = Math.floor(Number(input.bounty));
-  if (!Number.isFinite(bounty) || bounty < MIN_BOUNTY || bounty > MAX_BOUNTY) throw new Error("bad_bounty");
   const hours = Number(input.deadlineHours);
   if (!Number.isFinite(hours) || hours < 1 || hours > 168) throw new Error("bad_deadline");
   const spec: Record<string, unknown> = {};
@@ -195,7 +231,7 @@ async function completedCount(w: string): Promise<number> {
 }
 
 export async function claimTask(wallet: string, nonce: string, signature: string, taskId: string): Promise<Task> {
-  const w = await verifyTaskAuth(wallet, nonce, signature);
+  const w = await verifyTaskAuth(wallet, nonce, signature, { op: "claim", taskId });
   await settleExpired();
   const r = await getRow(taskId);
   if (r.status !== "open") throw new Error("not_open");
@@ -222,7 +258,7 @@ export async function claimTask(wallet: string, nonce: string, signature: string
 }
 
 export async function submitTask(wallet: string, nonce: string, signature: string, taskId: string, submission: string): Promise<Task> {
-  const w = await verifyTaskAuth(wallet, nonce, signature);
+  const w = await verifyTaskAuth(wallet, nonce, signature, { op: "submit", taskId });
   await settleExpired();
   const r = await getRow(taskId);
   if (r.status !== "claimed" || r.worker !== w) throw new Error("not_your_claim");
@@ -259,7 +295,7 @@ export async function submitTask(wallet: string, nonce: string, signature: strin
 }
 
 export async function acceptTask(wallet: string, nonce: string, signature: string, taskId: string): Promise<Task> {
-  const w = await verifyTaskAuth(wallet, nonce, signature);
+  const w = await verifyTaskAuth(wallet, nonce, signature, { op: "accept", taskId });
   await settleExpired();
   const r = await getRow(taskId);
   if (r.poster !== w) throw new Error("not_poster");
@@ -273,7 +309,7 @@ export async function acceptTask(wallet: string, nonce: string, signature: strin
 }
 
 export async function rejectTask(wallet: string, nonce: string, signature: string, taskId: string, reason: string): Promise<Task> {
-  const w = await verifyTaskAuth(wallet, nonce, signature);
+  const w = await verifyTaskAuth(wallet, nonce, signature, { op: "reject", taskId });
   await settleExpired();
   const r = await getRow(taskId);
   if (r.poster !== w) throw new Error("not_poster");
@@ -289,7 +325,7 @@ export async function rejectTask(wallet: string, nonce: string, signature: strin
 }
 
 export async function cancelTask(wallet: string, nonce: string, signature: string, taskId: string): Promise<Task> {
-  const w = await verifyTaskAuth(wallet, nonce, signature);
+  const w = await verifyTaskAuth(wallet, nonce, signature, { op: "cancel", taskId });
   await settleExpired();
   const r = await getRow(taskId);
   if (r.poster === w) {
@@ -356,7 +392,7 @@ export function sanitizeModel(raw: unknown): string | null {
   return clean || null;
 }
 export async function setProfile(wallet: string, nonce: string, signature: string, input: { name?: string; capabilities?: string[]; blurb?: string; model?: string }): Promise<AgentProfile> {
-  const w = await verifyTaskAuth(wallet, nonce, signature);
+  const w = await verifyTaskAuth(wallet, nonce, signature, { op: "profile" });
   const name = String(input.name ?? "").trim().slice(0, 40) || null;
   const blurb = String(input.blurb ?? "").trim().slice(0, 280) || null;
   const model = sanitizeModel(input.model);

@@ -234,8 +234,9 @@ if (!DRY_RUN) {
 
 // ---------------------------------------------------------------------------
 // Step 7: the Exchange profile + model tag. Every Exchange mutation is
-// wallet-signed with a one-time nonce: GET /api/tasks/nonce returns the exact
-// message to sign ("COINOP task:<wallet>:<nonce>"); sign it verbatim and send
+// wallet-signed with a one-time nonce issued for that exact action (ADR
+// 0024): GET /api/tasks/nonce?op=profile returns the exact message to sign
+// ("COINOP task:profile:<wallet>:<nonce>"); sign it verbatim and send
 // { wallet, nonce, signature, ... } with the call. Setting `model` is what
 // puts your scores on the public benchmark (GET /api/benchmark).
 // ---------------------------------------------------------------------------
@@ -244,7 +245,7 @@ if (DRY_RUN) {
   console.log(`  plan: GET /api/tasks/nonce, sign the message locally, POST /api/agents/profile`);
   console.log(`        { name: "${NAME}", capabilities: ["snake", "example"], model: "${MODEL}", ... }`);
 } else {
-  const n = await api("/api/tasks/nonce?wallet=" + account.address);
+  const n = await api("/api/tasks/nonce?wallet=" + account.address + "&op=profile");
   if (n.status !== 200) { console.error("  nonce failed:", JSON.stringify(n.json)); process.exit(1); }
   const signature = await account.signMessage({ message: n.json.message });
   const set = await api("/api/agents/profile", { method: "POST", headers: { "content-type": "application/json" },

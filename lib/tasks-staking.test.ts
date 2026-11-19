@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { privateKeyToAccount, generatePrivateKey } from "viem/accounts";
 import { getDb, schema } from "./db";
 import { accruePlayReward, availableToClaim, rewardBalance, rewardEntries } from "./rewards";
-import { issueTaskNonce, postTask, claimTask, submitTask, acceptTask, rejectTask, cancelTask, getTask, listTasks, stakeFor, stakeRateFor } from "./tasks";
+import { issueTaskNonce, postTask, claimTask, submitTask, acceptTask, rejectTask, cancelTask, getTask, listTasks, stakeFor, stakeRateFor, type TaskIntent } from "./tasks";
 // ADR 0017: tiered worker stake (lock / return / slash), the new-worker
 // bounty cap, and the structured custom-task schema. In-memory DB, throwaway
 // keys; each scenario uses a fresh worker so balances stay exact.
@@ -12,8 +12,8 @@ process.env.TREASURY_ADDRESS = "0x312e8Efd90C134f6E54A0B612dF4f55775eC2Bd7";
 const TREASURY = "0x312e8Efd90C134f6E54A0B612dF4f55775eC2Bd7";
 const poster = privateKeyToAccount(generatePrivateKey());
 type Account = ReturnType<typeof privateKeyToAccount>;
-async function sign(a: Account) {
-  const { nonce, message } = await issueTaskNonce(a.address);
+async function sign(a: Account, intent: TaskIntent) {
+  const { nonce, message } = await issueTaskNonce(a.address, intent);
   return { nonce, signature: await a.signMessage({ message }) };
 }
 async function fund(a: Account, plays: number) {
@@ -25,7 +25,7 @@ async function freshWorker(plays: number): Promise<Account> {
   return a;
 }
 async function post(bounty: number, extra: Record<string, unknown> = {}) {
-  const s = await sign(poster);
+  const s = await sign(poster, { op: "post", type: "custom", bounty: bounty });
   return postTask(poster.address, s.nonce, s.signature,
     { type: "custom", title: "Stake test task", description: "d", bounty, deadlineHours: 24, ...extra } as Parameters<typeof postTask>[3]);
 }
@@ -52,7 +52,7 @@ describe("worker stake", () => {
   it("locks the stake at claim and drops the claimable balance", async () => {
     const w = await freshWorker(4); // 100 QTR, 0 completions
     const t = await post(50);
-    const s = await sign(w);
+    const s = await sign(w, { op: "claim", taskId: t.id });
     const claimed = await claimTask(w.address, s.nonce, s.signature, t.id);
     expect(claimed.stake).toBe(15); // 30% of 50
     expect(await rewardBalance(w.address)).toBe(85);
@@ -64,14 +64,14 @@ describe("worker stake", () => {
   it("blocks new workers from bounties over the 100 QTR cap", async () => {
     const w = await freshWorker(40); // balance is not the issue — the cap is
     const t = await post(150);
-    const s = await sign(w);
+    const s = await sign(w, { op: "claim", taskId: t.id });
     await expect(claimTask(w.address, s.nonce, s.signature, t.id)).rejects.toThrow("new_worker_cap");
   });
 
   it("fails the claim when the balance cannot cover the stake", async () => {
     const w = await freshWorker(1); // 25 QTR; a 100 bounty needs a 30 stake
     const t = await post(100);
-    const s = await sign(w);
+    const s = await sign(w, { op: "claim", taskId: t.id });
     await expect(claimTask(w.address, s.nonce, s.signature, t.id)).rejects.toThrow("insufficient_stake");
     expect((await getTask(t.id)).status).toBe("open"); // a failed claim leaves no trace
   });
@@ -79,11 +79,11 @@ describe("worker stake", () => {
   it("returns the stake on settlement, alongside pay and fee", async () => {
     const w = await freshWorker(4); // 100
     const t = await post(50);
-    let s = await sign(w);
+    let s = await sign(w, { op: "claim", taskId: t.id });
     await claimTask(w.address, s.nonce, s.signature, t.id);
-    s = await sign(w);
+    s = await sign(w, { op: "submit", taskId: t.id });
     await submitTask(w.address, s.nonce, s.signature, t.id, "done");
-    s = await sign(poster);
+    s = await sign(poster, { op: "accept", taskId: t.id });
     await acceptTask(poster.address, s.nonce, s.signature, t.id);
     expect(await rewardBalance(w.address)).toBe(145); // 100 - 15 stake + 45 pay + 15 stake back
     const entries = await entriesFor(w.address, t.id);
@@ -96,11 +96,11 @@ describe("worker stake", () => {
   it("returns the stake when the poster rejects a submission", async () => {
     const w = await freshWorker(4); // 100
     const t = await post(40); // stake 12 at the new-worker tier
-    let s = await sign(w);
+    let s = await sign(w, { op: "claim", taskId: t.id });
     await claimTask(w.address, s.nonce, s.signature, t.id);
-    s = await sign(w);
+    s = await sign(w, { op: "submit", taskId: t.id });
     await submitTask(w.address, s.nonce, s.signature, t.id, "an attempt");
-    s = await sign(poster);
+    s = await sign(poster, { op: "reject", taskId: t.id });
     await rejectTask(poster.address, s.nonce, s.signature, t.id, "not it");
     expect(await rewardBalance(w.address)).toBe(100); // stake back, no pay
     const entries = await entriesFor(w.address, t.id);
@@ -111,7 +111,7 @@ describe("worker stake", () => {
   it("slashes the stake when a claim lapses unsubmitted and reopens the task", async () => {
     const w = await freshWorker(4); // 100
     const t = await post(50); // stake 15
-    const s = await sign(w);
+    const s = await sign(w, { op: "claim", taskId: t.id });
     await claimTask(w.address, s.nonce, s.signature, t.id);
     const db = await getDb();
     await db.update(schema.tasks).set({ claimExpires: new Date(Date.now() - 1000) }).where(eq(schema.tasks.id, t.id));
@@ -130,7 +130,7 @@ describe("worker stake", () => {
   it("slashes the stake when a claimed task passes its deadline unsubmitted", async () => {
     const w = await freshWorker(4);
     const t = await post(50);
-    const s = await sign(w);
+    const s = await sign(w, { op: "claim", taskId: t.id });
     await claimTask(w.address, s.nonce, s.signature, t.id);
     const db = await getDb();
     await db.update(schema.tasks).set({ deadline: new Date(Date.now() - 1000), claimExpires: new Date(Date.now() - 1000) }).where(eq(schema.tasks.id, t.id));
@@ -145,9 +145,9 @@ describe("worker stake", () => {
   it("slashes the stake when the worker releases their own claim", async () => {
     const w = await freshWorker(4); // 100
     const t = await post(50); // stake 15
-    let s = await sign(w);
+    let s = await sign(w, { op: "claim", taskId: t.id });
     await claimTask(w.address, s.nonce, s.signature, t.id);
-    s = await sign(w);
+    s = await sign(w, { op: "cancel", taskId: t.id });
     const released = await cancelTask(w.address, s.nonce, s.signature, t.id);
     expect(released.status).toBe("open");
     expect(released.worker).toBeNull();
@@ -159,10 +159,10 @@ describe("worker stake", () => {
   it("returns the stake when the poster cancels a live claim", async () => {
     const w = await freshWorker(4); // 100
     const t = await post(50);
-    let s = await sign(w);
+    let s = await sign(w, { op: "claim", taskId: t.id });
     await claimTask(w.address, s.nonce, s.signature, t.id);
     const posterBefore = await rewardBalance(poster.address);
-    s = await sign(poster);
+    s = await sign(poster, { op: "cancel", taskId: t.id });
     const cancelled = await cancelTask(poster.address, s.nonce, s.signature, t.id);
     expect(cancelled.status).toBe("refunded");
     expect((await rewardBalance(poster.address)) - posterBefore).toBe(50);
@@ -175,13 +175,13 @@ describe("worker stake", () => {
     const w = await freshWorker(4);
     const stranger = await freshWorker(1);
     const t = await post(50);
-    let s = await sign(w);
+    let s = await sign(w, { op: "claim", taskId: t.id });
     await claimTask(w.address, s.nonce, s.signature, t.id);
-    s = await sign(w);
+    s = await sign(w, { op: "submit", taskId: t.id });
     await submitTask(w.address, s.nonce, s.signature, t.id, "work");
-    s = await sign(w);
+    s = await sign(w, { op: "cancel", taskId: t.id });
     await expect(cancelTask(w.address, s.nonce, s.signature, t.id)).rejects.toThrow("not_your_claim");
-    s = await sign(stranger);
+    s = await sign(stranger, { op: "cancel", taskId: t.id });
     await expect(cancelTask(stranger.address, s.nonce, s.signature, t.id)).rejects.toThrow("not_poster");
   });
 
@@ -189,15 +189,15 @@ describe("worker stake", () => {
     const w = await freshWorker(8); // 200
     // earn the first completion the real way
     const t1 = await post(50);
-    let s = await sign(w);
+    let s = await sign(w, { op: "claim", taskId: t1.id });
     const c1 = await claimTask(w.address, s.nonce, s.signature, t1.id);
     expect(c1.stake).toBe(15); // 30% while new
-    s = await sign(w);
+    s = await sign(w, { op: "submit", taskId: t1.id });
     await submitTask(w.address, s.nonce, s.signature, t1.id, "done");
-    s = await sign(poster);
+    s = await sign(poster, { op: "accept", taskId: t1.id });
     await acceptTask(poster.address, s.nonce, s.signature, t1.id);
     const t2 = await post(50);
-    s = await sign(w);
+    s = await sign(w, { op: "claim", taskId: t2.id });
     const c2 = await claimTask(w.address, s.nonce, s.signature, t2.id);
     expect(c2.stake).toBe(10); // 20% with 1 completion
     // four more settled rows put the worker at 5 completions
@@ -208,7 +208,7 @@ describe("worker stake", () => {
         deadline: new Date(Date.now() + 3600_000), createdAt: new Date() });
     }
     const t3 = await post(50);
-    s = await sign(w);
+    s = await sign(w, { op: "claim", taskId: t3.id });
     const c3 = await claimTask(w.address, s.nonce, s.signature, t3.id);
     expect(c3.stake).toBe(5); // 10% with 5 completions
   });
@@ -216,7 +216,7 @@ describe("worker stake", () => {
 
 describe("structured custom-task schema", () => {
   it("round-trips deliverable and acceptance through the spec, capped at 280 chars", async () => {
-    const s = await sign(poster);
+    const s = await sign(poster, { op: "post", type: "custom", bounty: 25 });
     const t = await postTask(poster.address, s.nonce, s.signature, {
       type: "custom", title: "Schema task", description: "d", bounty: 25, deadlineHours: 4,
       deliverable: "x".repeat(300), acceptance: "Poster checks the summary against the board.",
@@ -228,7 +228,7 @@ describe("structured custom-task schema", () => {
     expect(read.spec.acceptance).toBe("Poster checks the summary against the board.");
   });
   it("leaves arcade_score specs untouched by the schema fields", async () => {
-    const s = await sign(poster);
+    const s = await sign(poster, { op: "post", type: "arcade_score", bounty: 25 });
     const t = await postTask(poster.address, s.nonce, s.signature, {
       type: "arcade_score", title: "Score task", description: "d", bounty: 25, deadlineHours: 4,
       spec: { gameSlug: "snake", minScore: 10 }, deliverable: "should not stick", acceptance: "nor this",

@@ -83,8 +83,8 @@ describe("hosted MCP endpoint (/api/mcp)", () => {
 
   it("signed mutations work with nonce + local signature only (profile + model tag)", async () => {
     const account = privateKeyToAccount(generatePrivateKey());
-    const nonce = await toolJson("coinop_tasks_nonce", { wallet: account.address });
-    expect(nonce.message).toBe("COINOP task:" + account.address.toLowerCase() + ":" + nonce.nonce);
+    const nonce = await toolJson("coinop_tasks_nonce", { wallet: account.address, op: "profile" });
+    expect(nonce.message).toBe("COINOP task:profile:" + account.address.toLowerCase() + ":" + nonce.nonce);
     const signature = await account.signMessage({ message: nonce.message });
     const profile = await toolJson("coinop_set_profile",
       { wallet: account.address, nonce: nonce.nonce, signature, name: "Hosted Test", model: "hosted-test-model" });
@@ -96,7 +96,7 @@ describe("hosted MCP endpoint (/api/mcp)", () => {
 
   it("a bad signature is refused by the underlying REST verification", async () => {
     const account = privateKeyToAccount(generatePrivateKey());
-    const nonce = await toolJson("coinop_tasks_nonce", { wallet: account.address });
+    const nonce = await toolJson("coinop_tasks_nonce", { wallet: account.address, op: "profile" });
     const res = await callTool("coinop_set_profile",
       { wallet: account.address, nonce: nonce.nonce, signature: "0x" + "00".repeat(65), name: "Nope" });
     expect(res.isError).toBe(true);

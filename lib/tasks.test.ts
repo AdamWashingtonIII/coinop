@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll } from "vitest";
 import { privateKeyToAccount, generatePrivateKey } from "viem/accounts";
 import { getDb, schema } from "./db";
 import { accruePlayReward, availableToClaim, rewardBalance } from "./rewards";
-import { issueTaskNonce, postTask, claimTask, submitTask, acceptTask, rejectTask, cancelTask, listTasks, setProfile, directory, taskStats } from "./tasks";
+import { issueTaskNonce, postTask, claimTask, submitTask, acceptTask, rejectTask, cancelTask, listTasks, setProfile, directory, taskStats, type TaskIntent } from "./tasks";
 // Exchange money-flow tests on the in-memory DB: lock, settle + fee, refunds,
 // expiry, auto-verification, and the auth/nonce rules. Keys are throwaway.
 process.env.COINOP_DB_DIR = process.env.COINOP_DB_DIR ?? "memory://";
@@ -10,8 +10,8 @@ process.env.TREASURY_ADDRESS = "0x312e8Efd90C134f6E54A0B612dF4f55775eC2Bd7";
 const poster = privateKeyToAccount(generatePrivateKey());
 const worker = privateKeyToAccount(generatePrivateKey());
 const third = privateKeyToAccount(generatePrivateKey());
-async function sign(a: ReturnType<typeof privateKeyToAccount>) {
-  const { nonce, message } = await issueTaskNonce(a.address);
+async function sign(a: ReturnType<typeof privateKeyToAccount>, intent: TaskIntent) {
+  const { nonce, message } = await issueTaskNonce(a.address, intent);
   return { nonce, signature: await a.signMessage({ message }) };
 }
 async function fund(a: ReturnType<typeof privateKeyToAccount>, plays: number) {
@@ -22,20 +22,20 @@ beforeAll(async () => { await fund(poster, 8); await fund(worker, 8); await fund
 describe("exchange", () => {
   it("posts with a lock, settles a custom task with the 10% fee", async () => {
     expect(await availableToClaim(poster.address)).toBe(200);
-    const s1 = await sign(poster);
+    const s1 = await sign(poster, { op: "post", type: "custom", bounty: 100 });
     const t = await postTask(poster.address, s1.nonce, s1.signature,
       { type: "custom", title: "Write a haiku", description: "About rain.", bounty: 100, deadlineHours: 24 });
     expect(t.status).toBe("open");
     expect(await availableToClaim(poster.address)).toBe(100);
-    const s2 = await sign(worker);
+    const s2 = await sign(worker, { op: "claim", taskId: t.id });
     const claimed = await claimTask(worker.address, s2.nonce, s2.signature, t.id);
     expect(claimed.status).toBe("claimed");
     expect(claimed.stake).toBe(30); // ADR 0017: new worker stakes 30% of 100
     expect(await rewardBalance(worker.address)).toBe(170); // stake locked out of the balance
-    const s3 = await sign(worker);
+    const s3 = await sign(worker, { op: "submit", taskId: t.id });
     const submitted = await submitTask(worker.address, s3.nonce, s3.signature, t.id, "rain on rooftops");
     expect(submitted.status).toBe("submitted");
-    const s4 = await sign(poster);
+    const s4 = await sign(poster, { op: "accept", taskId: t.id });
     const settled = await acceptTask(poster.address, s4.nonce, s4.signature, t.id);
     expect(settled.status).toBe("settled");
     expect(await rewardBalance(worker.address)).toBe(290); // 200 funded + (100 - 10% fee); the 30 stake came back at settlement
@@ -44,29 +44,52 @@ describe("exchange", () => {
     expect(stats.settled).toBe(1); expect(stats.qtrVolume).toBe(100); expect(stats.feesEarned).toBe(10);
   });
   it("rejects bad signatures and nonce reuse", async () => {
-    const { nonce } = await issueTaskNonce(poster.address);
+    const { nonce } = await issueTaskNonce(poster.address, { op: "post", type: "custom", bounty: 10 });
     await expect(postTask(poster.address, nonce, "0x" + "00".repeat(65),
       { type: "custom", title: "x", description: "y", bounty: 10, deadlineHours: 2 })).rejects.toThrow("bad_signature");
-    const s = await sign(poster);
+    const s = await sign(poster, { op: "post", type: "custom", bounty: 10 });
     const t = await postTask(poster.address, s.nonce, s.signature,
       { type: "custom", title: "Cancel me", description: "d", bounty: 10, deadlineHours: 2 });
     await expect(cancelTask(poster.address, s.nonce, s.signature, t.id)).rejects.toThrow("bad_nonce"); // nonce was single-use
-    const s2 = await sign(poster);
+    const s2 = await sign(poster, { op: "cancel", taskId: t.id });
     const cancelled = await cancelTask(poster.address, s2.nonce, s2.signature, t.id);
     expect(cancelled.status).toBe("refunded");
   });
+  it("ADR 0024: a signature binds its action — cross-action and cross-task replay fail", async () => {
+    const s1 = await sign(poster, { op: "post", type: "custom", bounty: 10 });
+    const t = await postTask(poster.address, s1.nonce, s1.signature,
+      { type: "custom", title: "Bound", description: "d", bounty: 10, deadlineHours: 2 });
+    // signed to CLAIM this task; replayed as a CANCEL by the poster → bad_signature
+    const claimSig = await sign(poster, { op: "claim", taskId: t.id });
+    await expect(cancelTask(poster.address, claimSig.nonce, claimSig.signature, t.id)).rejects.toThrow("bad_signature");
+    // signed for THIS task; replayed against a DIFFERENT task → bad_signature
+    const s2 = await sign(poster, { op: "post", type: "custom", bounty: 10 });
+    const t2 = await postTask(poster.address, s2.nonce, s2.signature,
+      { type: "custom", title: "Bound 2", description: "d", bounty: 10, deadlineHours: 2 });
+    const cancelSig = await sign(poster, { op: "cancel", taskId: t.id });
+    await expect(cancelTask(poster.address, cancelSig.nonce, cancelSig.signature, t2.id)).rejects.toThrow("bad_signature");
+    // signed for bounty 10; the post itself asks for 20 → bad_signature
+    const postSig = await sign(poster, { op: "post", type: "custom", bounty: 10 });
+    await expect(postTask(poster.address, postSig.nonce, postSig.signature,
+      { type: "custom", title: "Bound 3", description: "d", bounty: 20, deadlineHours: 2 })).rejects.toThrow("bad_signature");
+    // cleanup: cancel both tasks with correctly bound signatures
+    const c1 = await sign(poster, { op: "cancel", taskId: t.id });
+    await cancelTask(poster.address, c1.nonce, c1.signature, t.id);
+    const c2 = await sign(poster, { op: "cancel", taskId: t2.id });
+    await cancelTask(poster.address, c2.nonce, c2.signature, t2.id);
+  });
   it("refunds the poster in full on rejection, and blocks self-claims and over-claiming", async () => {
-    const s1 = await sign(third);
+    const s1 = await sign(third, { op: "post", type: "custom", bounty: 50 });
     const t = await postTask(third.address, s1.nonce, s1.signature,
       { type: "custom", title: "Doomed task", description: "d", bounty: 50, deadlineHours: 4 });
     expect(await availableToClaim(third.address)).toBe(0);
-    const ss = await sign(third);
+    const ss = await sign(third, { op: "claim", taskId: t.id });
     await expect(claimTask(third.address, ss.nonce, ss.signature, t.id)).rejects.toThrow("self_claim");
-    const s2 = await sign(worker);
+    const s2 = await sign(worker, { op: "claim", taskId: t.id });
     await claimTask(worker.address, s2.nonce, s2.signature, t.id);
-    const s3 = await sign(worker);
+    const s3 = await sign(worker, { op: "submit", taskId: t.id });
     await submitTask(worker.address, s3.nonce, s3.signature, t.id, "an attempt");
-    const s4 = await sign(third);
+    const s4 = await sign(third, { op: "reject", taskId: t.id });
     const rejected = await rejectTask(third.address, s4.nonce, s4.signature, t.id, "not what I asked for");
     expect(rejected.status).toBe("refunded");
     expect(await availableToClaim(third.address)).toBe(50);
@@ -75,25 +98,25 @@ describe("exchange", () => {
     expect(w?.tasksRejected).toBe(1);
   });
   it("insufficient QTR cannot post", async () => {
-    const s = await sign(worker); // worker has 90 claimable but they're earnings; bounty 500 > 90
+    const s = await sign(worker, { op: "post", type: "custom", bounty: 500 }); // worker has 90 claimable but they're earnings; bounty 500 > 90
     await expect(postTask(worker.address, s.nonce, s.signature,
       { type: "custom", title: "Too rich", description: "d", bounty: 500, deadlineHours: 2 })).rejects.toThrow("insufficient_qtr");
   });
   it("arcade_score tasks auto-verify against a recorded run and settle instantly", async () => {
-    const s1 = await sign(poster);
+    const s1 = await sign(poster, { op: "post", type: "arcade_score", bounty: 40 });
     const t = await postTask(poster.address, s1.nonce, s1.signature,
       { type: "arcade_score", title: "Snake 50+", description: "Score at least 50 on Snake.", bounty: 40, deadlineHours: 6, spec: { gameSlug: "snake", minScore: 50 } });
-    const s2 = await sign(worker);
+    const s2 = await sign(worker, { op: "claim", taskId: t.id });
     const claimed = await claimTask(worker.address, s2.nonce, s2.signature, t.id);
     const db = await getDb();
     // a run that finished BEFORE the claim must not count
     await db.insert(schema.scores).values({ id: "old-run", gameSlug: "snake", wallet: worker.address.toLowerCase(), value: 500, verified: true, sessionId: "old-sid", createdAt: new Date((claimed.claimedAt ?? 0) - 60_000) });
-    const sOld = await sign(worker);
+    const sOld = await sign(worker, { op: "submit", taskId: t.id });
     await expect(submitTask(worker.address, sOld.nonce, sOld.signature, t.id, "old-sid")).rejects.toThrow("verification_failed");
     // a fresh qualifying run settles immediately: 40 - 4 fee = 36 more QTR
     await db.insert(schema.scores).values({ id: "new-run", gameSlug: "snake", wallet: worker.address, value: 80, verified: true, sessionId: "new-sid", createdAt: new Date() }); // checksummed, as production writes it
     const before = await rewardBalance(worker.address);
-    const s3 = await sign(worker);
+    const s3 = await sign(worker, { op: "submit", taskId: t.id });
     const settled = await submitTask(worker.address, s3.nonce, s3.signature, t.id, "new-sid");
     expect(settled.status).toBe("settled");
     // 36 = 40 bounty - 4 fee, plus the 8 QTR stake (1 completion → 20% tier)
@@ -101,19 +124,19 @@ describe("exchange", () => {
     expect((await rewardBalance(worker.address)) - before).toBe(44);
   });
   it("clock-skew grace: a run recorded seconds before the claim still verifies", async () => {
-    const s1 = await sign(poster);
+    const s1 = await sign(poster, { op: "post", type: "arcade_score", bounty: 10 });
     const t = await postTask(poster.address, s1.nonce, s1.signature,
       { type: "arcade_score", title: "Skew check", description: "d", bounty: 10, deadlineHours: 2, spec: { gameSlug: "snake", minScore: 10 } });
-    const s2 = await sign(worker);
+    const s2 = await sign(worker, { op: "claim", taskId: t.id });
     const claimed = await claimTask(worker.address, s2.nonce, s2.signature, t.id);
     const db = await getDb();
     await db.insert(schema.scores).values({ id: "skew-run", gameSlug: "snake", wallet: worker.address.toLowerCase(), value: 20, verified: true, sessionId: "skew-sid", createdAt: new Date((claimed.claimedAt ?? 0) - 5_000) });
-    const s3 = await sign(worker);
+    const s3 = await sign(worker, { op: "submit", taskId: t.id });
     const settled = await submitTask(worker.address, s3.nonce, s3.signature, t.id, "skew-sid");
     expect(settled.status).toBe("settled");
   });
   it("profiles round-trip into the directory", async () => {
-    const s = await sign(worker);
+    const s = await sign(worker, { op: "profile" });
     await setProfile(worker.address, s.nonce, s.signature, { name: "SNAKE-CHARMER", capabilities: ["snake", "scouting"], blurb: "Fast on the grid." });
     const dir = await directory();
     const w = dir.find((d) => d.wallet === worker.address.toLowerCase());
