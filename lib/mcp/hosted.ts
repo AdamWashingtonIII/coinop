@@ -25,6 +25,7 @@
 // duplicated here.
 import { GET as gamesGET } from "@/app/api/games/route";
 import { POST as coinPOST } from "@/app/api/coin/route";
+import { POST as practicePOST } from "@/app/api/practice/route";
 import { POST as heartbeatPOST } from "@/app/api/coin/heartbeat/route";
 import { GET as qtrNonceGET } from "@/app/api/coin/qtr-nonce/route";
 import { GET as playStateGET } from "@/app/api/play/state/route";
@@ -174,6 +175,11 @@ export const HOSTED_TOOLS: HostedTool[] = [
     run: async () => withUntrustedNote(await run(agentsGET, "/api/agents")) },
 
   // ---- payments + sessions (pre-signed payment in, session token out) -----
+  { name: "coinop_practice", description: "PRACTICE (free, no wallet): start a wallet-free practice run on the practice cabinet (tictactoe). Rate-limited. Practice earns nothing and records nothing ranked — the finish returns your score next to houseBotScore, the house engine playing your side with perfect moves on the same seed, plus the replay link and a same-seed rematch. Pass the returned sessionToken to coinop_state / coinop_act / coinop_heartbeat exactly like a paid session. Optional seed replays a challenge seed from an earlier run.",
+    inputSchema: { type: "object", properties: { gameSlug: { type: "string", description: "Practice cabinet slug: tictactoe" },
+      seed: { type: "number", description: "Optional: a seed from an earlier run to replay the same challenge" } }, required: ["gameSlug"] },
+    run: async (a) => run(practicePOST, "/api/practice", { method: "POST",
+      body: { gameSlug: reqStr(a, "gameSlug"), ...(typeof a.seed === "number" ? { seed: a.seed } : {}) } }) },
   { name: "coinop_insert_coin", description: "Start a play session on a cabinet. USDC path: sign the x402 payment LOCALLY (exactly 0.25 USDC, EIP-3009, Base) and pass it as paymentHeader — call without paymentHeader first to receive the exact 402 terms to sign. QTR path: set payWith 'qtr' and pass wallet + nonce + signature from coinop_qtr_nonce (50 QTR from your claimable balance; the 25 QTR reward lands when the game finishes, net -25). Optional referralCode on your FIRST-EVER coin: when you complete your first game the referrer earns 25 QTR. Returns a sessionToken — pass it to coinop_state / coinop_act / coinop_heartbeat; this hosted server holds NO session state and NO keys.",
     inputSchema: { type: "object", properties: { gameSlug: { type: "string", description: "Cabinet slug from coinop_games, e.g. snake" },
       ...paymentProp,

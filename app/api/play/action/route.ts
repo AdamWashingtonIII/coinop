@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { authedSession } from "@/lib/play/auth";
 import { recordResult, finalizeCappedSession, cachedActionResponse, cacheActionResponse, persistPlayState } from "@/lib/play/store";
+import { practiceEndPayload } from "@/lib/practice";
 import { engineActions, isAllowedAction } from "@/lib/games/engine";
 // One action endpoint for every cabinet: the engine owns its action set
 // (stacker: drop · snake: up/down/left/right · breaker: left/right).
@@ -11,7 +12,8 @@ export async function POST(req: Request) {
   // the action — the cap never extends because an agent kept playing.
   const fin = await finalizeCappedSession(a.session).catch(() => null);
   if (fin) return NextResponse.json({ error: "session_max_reached", capped: true,
-    ...(fin === "voided" ? {} : { gameOver: true, finalScore: a.session.game.finalScore }) }, { status: 410 });
+    ...(fin === "voided" ? {} : { gameOver: true, finalScore: a.session.game.finalScore,
+      ...(a.session.practice ? { practice: practiceEndPayload(a.session) } : {}) }) }, { status: 410 });
   const { action, actionId } = (await req.json().catch(() => ({}))) as { action?: string; actionId?: string };
   const allowed = engineActions(a.session.gameSlug);
   if (!action || !isAllowedAction(a.session.gameSlug, action))
@@ -33,7 +35,8 @@ export async function POST(req: Request) {
   await persistPlayState(a.session);
   if (state.status === "over") await recordResult(a.session);
   const response = { sid: a.session.sid, state, legalActions: allowed,
-    ...(state.status === "over" ? { gameOver: true, finalScore: state.score } : {}) };
+    ...(state.status === "over" ? { gameOver: true, finalScore: state.score,
+      ...(a.session.practice ? { practice: practiceEndPayload(a.session) } : {}) } : {}) };
   if (idem) cacheActionResponse(a.session.sid, idem, response);
   return NextResponse.json(response);
 }

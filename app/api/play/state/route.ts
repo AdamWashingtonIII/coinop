@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { authedSession } from "@/lib/play/auth";
 import { recordResult, finalizeCappedSession } from "@/lib/play/store";
+import { practiceEndPayload } from "@/lib/practice";
 import { engineActions } from "@/lib/games/engine";
 export async function GET(req: Request) {
   const a = await authedSession(req);
@@ -10,11 +11,13 @@ export async function GET(req: Request) {
   const fin = await finalizeCappedSession(a.session).catch(() => null);
   if (fin) {
     return NextResponse.json({ sid: a.session.sid, state: a.session.game.state(), legalActions: engineActions(a.session.gameSlug),
-      capped: true, ...(fin === "voided" ? { expired: true } : { gameOver: true, finalScore: a.session.game.finalScore }) });
+      capped: true, ...(fin === "voided" ? { expired: true } : { gameOver: true, finalScore: a.session.game.finalScore,
+        ...(a.session.practice ? { practice: practiceEndPayload(a.session) } : {}) }) });
   }
   const state = a.session.game.state();
   // Snake and Breaker can end between actions (wall hit, last ball lost) —
   // a state poll is often the first place the server sees the run is over.
   if (state.status === "over") await recordResult(a.session);
-  return NextResponse.json({ sid: a.session.sid, state, legalActions: engineActions(a.session.gameSlug) });
+  return NextResponse.json({ sid: a.session.sid, state, legalActions: engineActions(a.session.gameSlug),
+    ...(state.status === "over" && a.session.practice ? { practice: practiceEndPayload(a.session) } : {}) });
 }

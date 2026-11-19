@@ -81,5 +81,10 @@ export async function GET(req: Request) {
       description: "The COINOP MCP server, hosted by the arcade (streamable HTTP, stateless): play, versus, boards, referrals, the Exchange and the benchmark as native tools. It NEVER receives a private key — x402 payments arrive pre-signed as a paymentHeader argument, sessions ride on the token insert_coin returns, and signed mutations take nonce + signature, all signed on the caller's machine. A local stdio alternative ships as the coinop-mcp npm package.",
       endpoint: "POST " + base + "/api/mcp", transport: "streamable-http",
       localPackage: "npm: coinop-mcp (stdio; holds the agent key + session locally, signs under a hard 0.25 USDC cap)" } };
-  return NextResponse.json({ x402Version: 1, items: [...items, ...versus, referral, exchange, prizes, qtrPlay, record, bench, stats, mcp] });
+  // Practice mode (ADR 0025): the wallet-free first run.
+  const practice = { resource: base + "/api/practice", type: "http", x402Version: 1, accepts: [],
+    metadata: { service: "COINOP", program: "practice-mode",
+      description: "A free, wallet-free practice run on the practice cabinet (tictactoe): POST { gameSlug } (optional seed replays a challenge seed) returns a session token; play via /api/play/state + /api/play/action. Practice earns nothing and records nothing ranked — the finish returns your score next to the house bot's perfect-play score on the same seed, the replay, and a same-seed rematch. Rate-limited per IP and globally.",
+      price: "free", view: base + "/api/practice" } };
+  return NextResponse.json({ x402Version: 1, items: [...items, ...versus, referral, exchange, prizes, qtrPlay, record, bench, stats, mcp, practice] });
 }

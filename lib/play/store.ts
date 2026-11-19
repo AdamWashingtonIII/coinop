@@ -20,13 +20,19 @@ export interface PlaySession {
   // sessions never auto-accrue the solo play reward — QTR is awarded (or not)
   // by match settlement. The seed is shared by both runs of a snake match.
   matchId?: string;
+  // Practice mode (ADR 0025): a wallet-free run. Practice sessions record a
+  // flagged replay but never a scores row, and skip every reward, referral,
+  // and prize hook. practiceHouseScore is the perfect-play bar on this seed.
+  practice?: boolean;
+  practiceHouseScore?: number;
 }
 const sessions = new Map<string, PlaySession>();
 const UNSEEDED = new Set(["stacker", "breaker"]);
 export interface PersistedPlay { v: 1; seed: number | null; bornAt: number; matchId: string | null;
+  practice?: boolean; houseScore?: number | null;
   actions: { atMs: number; action: string; actionId: string | null }[] }
 export async function createPlaySession(gameSlug: string, wallet: string,
-  opts: { seed?: number; matchId?: string } = {}): Promise<{ session: PlaySession; token: string; expiresAt: number }> {
+  opts: { seed?: number; matchId?: string; practice?: boolean; practiceHouseScore?: number } = {}): Promise<{ session: PlaySession; token: string; expiresAt: number }> {
   // The store deals the seed itself (ADR 0014) so it can persist it — a sibling
   // instance rebuilds this exact run from seed + action log.
   const seed = opts.seed ?? (UNSEEDED.has(gameSlug) ? undefined : Math.floor(Math.random() * 2 ** 31));
@@ -35,14 +41,16 @@ export async function createPlaySession(gameSlug: string, wallet: string,
   const sid = newSid();
   const session: PlaySession = { sid, gameSlug, wallet, game, createdAt: Date.now(), paymentStatus: "verified", recorded: false,
     seed: seed ?? null, actionIds: [],
-    ...(opts.matchId ? { matchId: opts.matchId } : {}) };
+    ...(opts.matchId ? { matchId: opts.matchId } : {}),
+    ...(opts.practice ? { practice: true, practiceHouseScore: opts.practiceHouseScore } : {}) };
   sessions.set(sid, session);
   const exp = Math.floor(Date.now() / 1000) + 90;
   const claims: SessionClaims = { sid, gameSlug, wallet, exp, nonce: sid };
   const token = signSession(claims);
   try {
     const db = await getDb();
-    const playState: PersistedPlay = { v: 1, seed: session.seed, bornAt: session.createdAt, matchId: opts.matchId ?? null, actions: [] };
+    const playState: PersistedPlay = { v: 1, seed: session.seed, bornAt: session.createdAt, matchId: opts.matchId ?? null,
+      ...(opts.practice ? { practice: true, houseScore: opts.practiceHouseScore ?? null } : {}), actions: [] };
     await db.insert(schema.sessions).values({ sid, tokenHash: createHash("sha256").update(token).digest("hex"),
       gameSlug, wallet, exp: new Date(exp * 1000), playState });
   } catch { /* the durable row is best-effort at coin-in; the result record at game over is the critical write */ }
@@ -54,6 +62,7 @@ export async function persistPlayState(s: PlaySession): Promise<void> {
     const db = await getDb();
     const log = s.game.actionLog();
     const playState: PersistedPlay = { v: 1, seed: s.seed, bornAt: s.createdAt, matchId: s.matchId ?? null,
+      ...(s.practice ? { practice: true, houseScore: s.practiceHouseScore ?? null } : {}),
       actions: log.map((a, i) => ({ atMs: a.atMs, action: a.action, actionId: s.actionIds[i] ?? null })) };
     await db.update(schema.sessions).set({ playState }).where(eq(schema.sessions.sid, s.sid));
   } catch { /* a missed write only means a sibling rebuild replays a shorter log */ }
@@ -79,7 +88,8 @@ export async function rebuildSession(sid: string): Promise<PlaySession | null> {
     const s: PlaySession = { sid, gameSlug: row.gameSlug, wallet: row.wallet, game, createdAt: p.bornAt,
       paymentStatus: "verified", recorded: scored.length > 0, seed: p.seed,
       actionIds: p.actions.map((a) => a.actionId ?? null),
-      ...(p.matchId ? { matchId: p.matchId } : {}) };
+      ...(p.matchId ? { matchId: p.matchId } : {}),
+      ...(p.practice ? { practice: true, practiceHouseScore: p.houseScore ?? undefined } : {}) };
     sessions.set(sid, s);
     return s;
   } catch { return null; }
@@ -130,16 +140,30 @@ async function writeResult(s: PlaySession, capped: boolean): Promise<void> {
     const transcriptHash = createHash("sha256")
       .update(canonicalJson({ slug: s.gameSlug, rulesetHash: rHash, finalScore: s.game.finalScore, actions, snapshots }))
       .digest("hex");
-    await db.insert(schema.scores).values({ id: randomBytes(12).toString("hex"), gameSlug: s.gameSlug,
-      wallet: s.wallet, value: s.game.finalScore, verified: true, sessionId: s.sid, rulesetHash: rHash });
+    // Practice runs (ADR 0025) write the replay only — flagged, with the
+    // house bar alongside — and never a scores row: nothing ranked, ever.
+    if (!s.practice) {
+      await db.insert(schema.scores).values({ id: randomBytes(12).toString("hex"), gameSlug: s.gameSlug,
+        wallet: s.wallet, value: s.game.finalScore, verified: true, sessionId: s.sid, rulesetHash: rHash });
+    }
     await db.insert(schema.gameEvents).values({ id: randomBytes(12).toString("hex"), sessionId: s.sid, type: "replay",
       payload: JSON.stringify({ slug: s.gameSlug, wallet: s.wallet, finalScore: s.game.finalScore,
+        ...(s.practice ? { practice: true, houseScore: s.practiceHouseScore ?? null } : {}),
         endedAt: Date.now(), actions, snapshots, rulesetHash: rHash, transcriptHash,
         ...(capped ? { capped: true } : {}),
         ...(s.game.seedCommitment ? { seedCommit: s.game.seedCommitment } : {}),
         ...(s.game.revealSeed ? { seed: s.game.revealSeed() } : {}) }) });
     await db.update(schema.sessions).set({ endedAt: new Date() }).where(eq(schema.sessions.sid, s.sid));
   } catch { s.recorded = false; /* retry on the next poll/action */ }
+  // Practice ends here: completion bookkeeping only — no match settlement,
+  // no reward release, no referral qualification (nothing was ever accrued).
+  if (s.recorded && s.practice) {
+    try {
+      const { finishPracticeRun } = await import("@/lib/practice");
+      await finishPracticeRun(s, "finished");
+    } catch { /* bookkeeping only */ }
+    return;
+  }
   // Versus: a recorded match run may complete the pair — hand off to settlement.
   if (s.recorded && s.matchId) {
     try {
@@ -187,10 +211,18 @@ export async function finalizeCappedSession(s: PlaySession): Promise<"recorded" 
       const db = await getDb();
       await db.update(schema.sessions).set({ endedAt: new Date() }).where(eq(schema.sessions.sid, s.sid));
     } catch { /* best-effort: the void below is the money-critical part */ }
-    try {
-      const { voidPendingPlayReward } = await import("@/lib/rewards");
-      await voidPendingPlayReward(s.sid);
-    } catch { /* the ledger guard keeps a later void attempt safe */ }
+    if (s.practice) {
+      // No reward was ever accrued for a practice run — just close the row.
+      try {
+        const { finishPracticeRun } = await import("@/lib/practice");
+        await finishPracticeRun(s, "voided");
+      } catch { /* bookkeeping only */ }
+    } else {
+      try {
+        const { voidPendingPlayReward } = await import("@/lib/rewards");
+        await voidPendingPlayReward(s.sid);
+      } catch { /* the ledger guard keeps a later void attempt safe */ }
+    }
     evictSession(s.sid);
     return "voided";
   }
@@ -217,7 +249,9 @@ export function nowPlaying(): { agents: number; sessions: number } {
   const wallets = new Set<string>();
   let n = 0;
   for (const s of sessions.values()) {
-    if (!s.game.isOver) { wallets.add(s.wallet.toLowerCase()); n++; }
+    // Practice runs are wallet-less walk-ins; the counter is about agents in
+    // ranked play, so they don't inflate it.
+    if (!s.game.isOver && !s.practice) { wallets.add(s.wallet.toLowerCase()); n++; }
   }
   return { agents: wallets.size, sessions: n };
 }

@@ -125,3 +125,16 @@ export const prizeLedger = pgTable("prize_ledger", {
 export const qtrPlayNonces = pgTable("qtr_play_nonces", {
   nonce: text("nonce").primaryKey(), wallet: text("wallet").notNull(), exp: timestamp("exp").notNull(),
 });
+
+// Practice mode (ADR 0025): wallet-free runs on the practice cabinet. A row
+// is written at run START (it is the rate-limit ledger: per-IP hourly and
+// global daily caps count started runs) and completed at finish. Practice
+// runs never touch scores, rewards, referrals, or prizes — this table plus
+// a flagged replay record are their only footprint.
+export const practiceRuns = pgTable("practice_runs", {
+  sid: text("sid").primaryKey(), gameSlug: text("game_slug").notNull(),
+  seed: integer("seed").notNull(), ipHash: text("ip_hash").notNull(),
+  status: text("status").notNull().default("started"), // started | finished | voided
+  houseScore: integer("house_score"), finalScore: integer("final_score"),
+  createdAt: timestamp("created_at").notNull().defaultNow(), finishedAt: timestamp("finished_at"),
+}, (t) => [index("practice_runs_ip_ts_idx").on(t.ipHash, t.createdAt), index("practice_runs_ts_idx").on(t.createdAt)]);

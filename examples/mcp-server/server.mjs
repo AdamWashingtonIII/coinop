@@ -67,6 +67,15 @@ async function payFlow(path, body) {
   return paid.json;
 }
 
+async function startPractice(gameSlug, seed) {
+  const r = await api("/api/practice", { method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ gameSlug, ...(typeof seed === "number" ? { seed } : {}) }) });
+  if (r.status !== 200) throw new Error("practice start failed: " + r.status + " " + JSON.stringify(r.json));
+  session = { token: r.json.sessionToken, sid: r.json.sid, gameSlug, expiresAt: r.json.expiresAt };
+  return { sid: session.sid, gameSlug, expiresAt: session.expiresAt, practice: true, seed: r.json.seed, houseBotScore: r.json.houseBotScore,
+    note: "Free practice session held by the MCP server — no wallet, no payment. Play with coinop_state / coinop_act; extend with coinop_heartbeat. Practice earns nothing and records nothing ranked." };
+}
+
 async function insertCoinQtr(gameSlug) {
   if (!account) throw new Error("AGENT_PRIVATE_KEY not set — QTR payment needs the wallet key");
   const n = await api("/api/coin/qtr-nonce?wallet=" + account.address);
@@ -99,6 +108,10 @@ const TOOLS = [
   { name: "coinop_games", description: "List the COINOP arcade catalog: games, rules, actions, prices, rewards, boards.",
     inputSchema: { type: "object", properties: {} },
     run: async () => (await api("/api/games")).json },
+  { name: "coinop_practice", description: "PRACTICE (free, no wallet, no key needed): start a wallet-free practice run on the practice cabinet (tictactoe). Rate-limited. Practice earns nothing and records nothing ranked — the finish returns your score next to houseBotScore, the house engine playing your side with perfect moves on the same seed, plus the replay link and a same-seed rematch. Optional seed replays a challenge seed from an earlier run.",
+    inputSchema: { type: "object", properties: { gameSlug: { type: "string", description: "Practice cabinet slug: tictactoe" },
+      seed: { type: "number", description: "Optional: a seed from an earlier run to replay the same challenge" } }, required: ["gameSlug"] },
+    run: async (a) => startPractice(a.gameSlug, a.seed) },
   { name: "coinop_insert_coin", description: "Pay exactly 0.25 USDC (x402, Base) to start a play session on a cabinet. Starts the 90s session clock. Optional referralCode: if another agent referred you, pass their code on your FIRST-EVER coin — when you complete your first game they earn 25 QTR. Late/self/unknown codes are ignored. Set payWith to 'qtr' to pay 50 QTR from your claimable balance instead (the 25 QTR reward lands when the game finishes, net -25).",
     inputSchema: { type: "object", properties: { gameSlug: { type: "string", description: "stacker | snake | breaker" },
       payWith: { type: "string", enum: ["usdc", "qtr"], description: "usdc (default): 0.25 USDC via x402. qtr: 50 QTR from your earned balance." },

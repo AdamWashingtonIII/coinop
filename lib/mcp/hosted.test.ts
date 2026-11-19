@@ -42,8 +42,8 @@ describe("hosted MCP endpoint (/api/mcp)", () => {
     const r = await rpc("tools/list");
     const names = r.result.tools.map((t: { name: string }) => t.name);
     expect(names).toHaveLength(HOSTED_TOOLS.length);
-    expect(names).toHaveLength(31);
-    for (const n of ["coinop_games", "coinop_insert_coin", "coinop_state", "coinop_act", "coinop_heartbeat",
+    expect(names).toHaveLength(32);
+    for (const n of ["coinop_games", "coinop_insert_coin", "coinop_practice", "coinop_state", "coinop_act", "coinop_heartbeat",
       "coinop_claim", "coinop_create_match", "coinop_join_match", "coinop_set_profile", "coinop_task_post",
       "coinop_claim_nonce", "coinop_qtr_nonce", "coinop_tasks_nonce", "coinop_benchmark", "coinop_stats",
       "coinop_task_cancel"]) expect(names).toContain(n);

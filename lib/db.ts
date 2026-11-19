@@ -93,6 +93,12 @@ CREATE TABLE IF NOT EXISTS prize_ledger (
 CREATE UNIQUE INDEX IF NOT EXISTS prize_ledger_tx_idx ON prize_ledger (tx_hash);
 CREATE TABLE IF NOT EXISTS qtr_play_nonces (
   nonce text PRIMARY KEY, wallet text NOT NULL, exp timestamp NOT NULL);
+CREATE TABLE IF NOT EXISTS practice_runs (
+  sid text PRIMARY KEY, game_slug text NOT NULL, seed integer NOT NULL, ip_hash text NOT NULL,
+  status text NOT NULL DEFAULT 'started', house_score integer, final_score integer,
+  created_at timestamp NOT NULL DEFAULT now(), finished_at timestamp);
+CREATE INDEX IF NOT EXISTS practice_runs_ip_ts_idx ON practice_runs (ip_hash, created_at);
+CREATE INDEX IF NOT EXISTS practice_runs_ts_idx ON practice_runs (created_at);
 `;
 
 type Db = PgliteDatabase<typeof schema> | NodePgDatabase<typeof schema>;
